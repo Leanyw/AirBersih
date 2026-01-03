@@ -133,21 +133,32 @@ export default function NotifikasiPage() {
     try {
       setIsLoading(true);
       
-      // Ambil notifikasi user
+      // Ambil notifikasi untuk semua warga (user_id IS NULL) dan khusus user ini
       const { data: notificationsData, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', user.id)
+        .or(`user_id.eq.${user.id},user_id.is.null`)
         .order('created_at', { ascending: false });
-
+  
       if (error) throw error;
-
+  
       console.log('Raw notifications data:', notificationsData);
+      
+      // HAPUS DUPLIKAT: Filter berdasarkan kombinasi unik title + message + type
+      const seen = new Set();
+      const uniqueNotifications = (notificationsData || []).filter(notification => {
+        const key = `${notification.title}-${notification.message}-${notification.type}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
       
       // Kumpulkan semua puskesmas_id yang unik
       const puskesmasIds = [...new Set(
-        notificationsData
-          ?.map(n => n.puskesmas_id)
+        uniqueNotifications
+          .map(n => n.puskesmas_id)
           .filter((id): id is string => !!id)
       )];
       
@@ -156,7 +167,7 @@ export default function NotifikasiPage() {
       setPuskesmasMap(puskesmasNames);
       
       // Gabungkan data
-      const enrichedNotifications = (notificationsData || []).map(notification => ({
+      const enrichedNotifications = uniqueNotifications.map(notification => ({
         ...notification,
         puskesmas: notification.puskesmas_id ? { 
           nama: puskesmasNames[notification.puskesmas_id] || 'Puskesmas' 
@@ -176,9 +187,9 @@ export default function NotifikasiPage() {
       const todayCount = enrichedNotifications.filter(n => 
         n.created_at && new Date(n.created_at).toDateString() === today
       ).length;
-
+  
       setStats({ total, unread, urgent, warning, today: todayCount });
-
+  
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
       toast.error(`Gagal memuat notifikasi: ${error.message}`);
