@@ -16,12 +16,10 @@ import {
   Heart,
   BookOpen,
   Navigation,
-  ZoomIn,
-  ZoomOut,
   Filter,
-  X,
   Maximize2,
-  RefreshCw
+  RefreshCw,
+  User
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HealthWidget from '@/components/health/HealthWidget';
@@ -77,6 +75,7 @@ type Notification = {
   type: string;
   is_read: boolean;
   created_at: string;
+  user_id: string | null;
 };
 
 type Statistics = {
@@ -133,6 +132,19 @@ const getNotificationIcon = (type: string) => {
       return <Bell className="w-5 h-5 text-blue-500" />;
     default:
       return <Bell className="w-5 h-5 text-gray-400" />;
+  }
+};
+
+const getNotificationBadgeColor = (type: string) => {
+  switch (type) {
+    case 'warning':
+      return 'bg-yellow-500';
+    case 'urgent':
+      return 'bg-red-500';
+    case 'update':
+      return 'bg-blue-500';
+    default:
+      return 'bg-gray-500';
   }
 };
 
@@ -247,12 +259,10 @@ function WaterSourceMarker({ source }: { source: WaterSource }) {
               href={`https://www.google.com/maps/dir/?api=1&destination=${source.latitude},${source.longitude}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: 'white', textDecoration: 'none' }}
-              className="inline-block mt-2 px-3 py-2 bg-blue-600 text-sm rounded hover:bg-blue-700"
+              className="inline-block mt-2 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
             >
               Lihat Rute di Google Maps
             </a>
-
           </div>
         </div>
       </Popup>
@@ -423,67 +433,81 @@ export default function WargaDashboard() {
         setReports(reportsData || []);
       }
 
-      // 4. Fetch notifications
+      // 4. Fetch notifications - FIXED QUERY
       const { data: notificationsData, error: notificationsError } = await supabase
         .from('notifications')
-        .select('id, title, message, type, is_read, created_at')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
+        .select('*')
+        .or(`user_id.eq.${user?.id},user_id.is.null`)
+        .order('created_at', { ascending: false });
 
       if (notificationsError) {
         console.log('Info: Belum ada notifikasi', notificationsError.message);
-      }
-
-      const finalNotifications = notificationsData || [];
-      
-      // Buat notifikasi selamat datang
-      if (finalNotifications.length === 0 && userData?.kecamatan) {
-        try {
-          const { error: insertError } = await supabase
-            .from('notifications')
-            .insert({
-              user_id: user?.id,
-              title: 'Selamat Datang di Air Bersih',
-              message: `Selamat bergabung! Mulai pantau kualitas air di wilayah ${userData.kecamatan}.`,
-              type: 'info',
-              is_read: false
+      } else {
+        // Filter duplikat berdasarkan kombinasi unik
+        const seen = new Set();
+        const uniqueNotifications: Notification[] = [];
+        
+        (notificationsData || []).forEach(notification => {
+          // Normalisasi pesan untuk perbandingan yang lebih baik
+          const normalizedMessage = notification.message?.replace(/\s+/g, ' ').trim();
+          const key = `${notification.title}-${normalizedMessage}-${notification.type}`;
+          
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueNotifications.push({
+              ...notification,
+              message: normalizedMessage || notification.message
             });
+          }
+        });
 
-          if (!insertError) {
-            finalNotifications.push({
-              id: 'welcome-msg',
+        // Cek apakah ada notifikasi selamat datang
+        const hasWelcomeNotification = uniqueNotifications.some(
+          n => n.title.includes('Selamat Datang') || n.title.includes('Selamat Bergabung')
+        );
+        
+        // Buat notifikasi selamat datang jika belum ada
+        if (uniqueNotifications.length === 0 && !hasWelcomeNotification && userData?.kecamatan) {
+          try {
+            const welcomeNotification: Notification = {
+              id: 'welcome-msg-' + Date.now(),
               title: 'Selamat Datang di Air Bersih',
               message: `Selamat bergabung! Mulai pantau kualitas air di wilayah ${userData.kecamatan}.`,
               type: 'info',
               is_read: false,
-              created_at: new Date().toISOString()
-            });
+              created_at: new Date().toISOString(),
+              user_id: user?.id || null
+            };
+            uniqueNotifications.unshift(welcomeNotification);
+          } catch (insertError) {
+            console.log('Tidak bisa membuat notifikasi selamat datang');
           }
-        } catch (insertError) {
-          console.log('Tidak bisa membuat notifikasi selamat datang');
         }
+
+        // Ambil 3 terbaru untuk dashboard
+        const dashboardNotifications = uniqueNotifications.slice(0, 3);
+        setNotifications(dashboardNotifications);
+
+        // Hitung notifikasi baru dari SEMUA notifikasi (bukan hanya 3 di dashboard)
+        const notifikasiBaru = uniqueNotifications.filter(n => !n.is_read).length;
+        
+        // 5. Hitung statistics
+        const reportsArray = reportsData || [];
+        const sourcesArray = waterSources || [];
+        const pending = reportsArray.filter(r => r.status === 'pending').length;
+        const diproses = reportsArray.filter(r => r.status === 'diproses').length;
+        const selesai = reportsArray.filter(r => r.status === 'selesai').length;
+        const sumberAman = sourcesArray.filter(s => s.status === 'aman').length;
+
+        setStats({
+          totalLaporan: reportsArray.length,
+          pending,
+          diproses,
+          selesai,
+          notifikasiBaru, // Ini yang benar, dari semua notifikasi
+          sumberAman,
+        });
       }
-
-      setNotifications(finalNotifications);
-
-      // 5. Hitung statistics
-      const reportsArray = reportsData || [];
-      const sourcesArray = waterSources || [];
-      const pending = reportsArray.filter(r => r.status === 'pending').length;
-      const diproses = reportsArray.filter(r => r.status === 'diproses').length;
-      const selesai = reportsArray.filter(r => r.status === 'selesai').length;
-      const notifikasiBaru = finalNotifications.filter(n => !n.is_read).length;
-      const sumberAman = sourcesArray.filter(s => s.status === 'aman').length;
-
-      setStats({
-        totalLaporan: reportsArray.length,
-        pending,
-        diproses,
-        selesai,
-        notifikasiBaru,
-        sumberAman,
-      });
 
       setDataFetched(true);
 
@@ -491,6 +515,36 @@ export default function WargaDashboard() {
       console.log('Informasi: Sedang memuat data awal...', error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId)
+        .eq('user_id', user?.id);
+
+      if (error && error.code !== 'PGRST116') {
+        console.log('Error marking notification as read:', error.message);
+        return;
+      }
+
+      // Update local state untuk notifikasi spesifik user
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === notificationId ? { ...notif, is_read: true } : notif
+        )
+      );
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        notifikasiBaru: Math.max(0, prev.notifikasiBaru - 1)
+      }));
+    } catch (error) {
+      console.log('Tidak bisa update status notifikasi:', error);
     }
   };
 
@@ -518,10 +572,6 @@ export default function WargaDashboard() {
 
   const handleRefreshMap = () => {
     fetchData();
-  };
-
-  const handleFullscreenMap = () => {
-    window.open('/peta', '_blank');
   };
 
   const filteredWaterSources = waterSources.filter(source => {
@@ -560,12 +610,35 @@ export default function WargaDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-          Selamat Datang di Air Bersih
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Pantau kualitas air di wilayah <span className="font-semibold text-blue-600">{userKecamatan || 'Anda'}</span>
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+              Selamat Datang di Air Bersih
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Pantau kualitas air di wilayah <span className="font-semibold text-blue-600">{userKecamatan || 'Anda'}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link 
+              href="/notifikasi"
+              className="relative p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              <Bell className="w-5 h-5 text-gray-600" />
+              {stats.notifikasiBaru > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                  {stats.notifikasiBaru}
+                </span>
+              )}
+            </Link>
+            <Link 
+              href="/profil"
+              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              <User className="w-5 h-5 text-gray-600" />
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -608,9 +681,9 @@ export default function WargaDashboard() {
           icon={Bell}
           iconBg="bg-purple-100"
           iconColor="text-purple-600"
+          highlight={stats.notifikasiBaru > 0}
         />
       </div>
-
 
       {/* PETA INTERAKTIF */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
@@ -892,12 +965,20 @@ export default function WargaDashboard() {
           <div className="bg-white rounded-xl shadow overflow-hidden">
             <div className="px-6 py-4 border-b">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-800">Notifikasi</h2>
-                {stats.notifikasiBaru > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                    {stats.notifikasiBaru} baru
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-gray-800">Notifikasi Terbaru</h2>
+                  {stats.notifikasiBaru > 0 && (
+                    <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                      {stats.notifikasiBaru} baru
+                    </span>
+                  )}
+                </div>
+                <Link 
+                  href="/notifikasi"
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Lihat semua →
+                </Link>
               </div>
             </div>
             
@@ -912,7 +993,10 @@ export default function WargaDashboard() {
                 notifications.map((notification) => (
                   <div 
                     key={notification.id} 
-                    className={`p-4 hover:bg-gray-50 transition-colors ${!notification.is_read ? 'bg-blue-50' : ''}`}
+                    className={`p-4 hover:bg-gray-50 transition-colors ${
+                      !notification.is_read ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                    }`}
+                    onClick={() => !notification.is_read && markNotificationAsRead(notification.id)}
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-1">
@@ -921,15 +1005,23 @@ export default function WargaDashboard() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
                           <h3 className="font-medium text-gray-800">{notification.title}</h3>
-                          {!notification.is_read && (
-                            <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                              Baru
+                          <div className="flex items-center gap-2">
+                            {!notification.is_read && (
+                              <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+                                Baru
+                              </span>
+                            )}
+                            <span className={`px-2 py-1 text-xs rounded-full text-white ${getNotificationBadgeColor(notification.type)}`}>
+                              {notification.type === 'urgent' ? 'Darurat' : 
+                               notification.type === 'warning' ? 'Peringatan' : 
+                               notification.type === 'update' ? 'Update' : 'Info'}
                             </span>
-                          )}
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600">{notification.message}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2">{notification.message}</p>
                         <p className="text-xs text-gray-500 mt-2">
                           {new Date(notification.created_at).toLocaleDateString('id-ID', {
+                            weekday: 'short',
                             day: 'numeric',
                             month: 'short',
                             hour: '2-digit',
