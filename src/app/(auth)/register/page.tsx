@@ -86,7 +86,8 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    console.log('🔧 Starting registration...');
+    console.log('📝 ========== REGISTER FORM SUBMIT ==========');
+    console.log('📋 Form data:', formData);
     
     if (!validateForm()) {
       toast.error('Harap perbaiki kesalahan form terlebih dahulu');
@@ -96,7 +97,7 @@ export default function RegisterPage() {
     setIsLoading(true);
   
     try {
-      console.log('📤 Sending signup request...');
+      console.log('📤 Calling signUp function...');
       const result = await signUp({
         email: formData.email,
         password: formData.password,
@@ -113,14 +114,12 @@ export default function RegisterPage() {
         // Tampilkan error yang lebih spesifik
         let errorMessage = 'Pendaftaran gagal';
         
-        if (result.error.message) {
-          errorMessage = result.error.message;
-        } else if (result.error.details?.message) {
-          errorMessage = result.error.details.message;
+        if (result.error.message?.includes('already registered')) {
+          errorMessage = 'Email sudah terdaftar';
         } else if (result.error.code === '23505') {
           errorMessage = 'Email atau NIK sudah terdaftar';
-        } else if (result.error.code === 'user_exists') {
-          errorMessage = 'Akun dengan email ini sudah ada';
+        } else if (result.error.message) {
+          errorMessage = result.error.message;
         }
         
         console.error('❌ Signup error details:', result.error);
@@ -128,16 +127,16 @@ export default function RegisterPage() {
         return;
       }
       
-      toast.success('🎉 Pendaftaran berhasil! Mengarahkan ke dashboard...');
-      console.log('✅ Registration successful!');
+      toast.success('🎉 Pendaftaran berhasil!');
+      console.log('✅ Registration successful! Redirecting...');
       
-      // Tunggu 2 detik sebelum auto redirect
+      // Auto redirect ke dashboard
       setTimeout(() => {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       }, 2000);
       
     } catch (error: any) {
-      console.error('❌ Unexpected error in signup:', error);
+      console.error('❌ Unexpected error:', error);
       toast.error('Terjadi kesalahan tak terduga. Silakan coba lagi.');
     } finally {
       setIsLoading(false);

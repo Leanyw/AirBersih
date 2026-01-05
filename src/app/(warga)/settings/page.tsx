@@ -54,23 +54,64 @@ export default function SettingsPage() {
     try {
       setIsLoading(true);
       
+      console.log('🔍 Fetching settings for user:', user?.id);
+      
+      // Query yang lebih komprehensif
       const { data, error } = await supabase
         .from('users')
-        .select('phone, notifications_enabled, sms_notifications, email_notifications')
+        .select('phone, notifications_enabled, sms_notifications, email_notifications, nama, email, kecamatan, kelurahan')
         .eq('id', user?.id)
         .single();
-
-      if (error) throw error;
-
+  
+      if (error) {
+        console.error('❌ Settings fetch error:', error);
+        
+        // Jika user tidak ditemukan, buat dulu
+        if (error.code === 'PGRST116') {
+          console.log('⚠️ User not found, creating basic profile...');
+          
+          const { data: authUser } = await supabase.auth.getUser();
+          
+          if (authUser.user) {
+            const { error: createError } = await supabase
+              .from('users')
+              .insert({
+                id: authUser.user.id,
+                email: authUser.user.email,
+                nama: authUser.user.email?.split('@')[0] || 'User',
+                kecamatan: 'Semarang Barat',
+                kelurahan: 'Belum diisi',
+                phone: '',
+                notifications_enabled: true,
+                sms_notifications: true,
+                email_notifications: true,
+                role: 'warga',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+            
+            if (!createError) {
+              // Coba fetch lagi
+              return fetchUserSettings();
+            }
+          }
+        }
+        
+        toast.error('Gagal memuat pengaturan');
+        return;
+      }
+  
+      console.log('✅ Settings data:', data);
+      
       setSettings({
         phone: data.phone || '',
         notifications_enabled: data.notifications_enabled ?? true,
         sms_notifications: data.sms_notifications ?? true,
         email_notifications: data.email_notifications ?? true,
       });
-
+  
     } catch (error) {
-      console.error('Error fetching settings:', error);
+      console.error('❌ Error in fetchUserSettings:', error);
       toast.error('Gagal memuat pengaturan');
     } finally {
       setIsLoading(false);
@@ -88,10 +129,12 @@ export default function SettingsPage() {
 
   const handleSaveProfile = async () => {
     if (!user) return;
-
+  
     setIsSaving(true);
-
+  
     try {
+      console.log('💾 Saving profile for user:', user.id);
+      
       const { error } = await supabase
         .from('users')
         .update({
@@ -99,12 +142,42 @@ export default function SettingsPage() {
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
-
-      if (error) throw error;
-
+  
+      if (error) {
+        console.error('❌ Update profile error:', error);
+        
+        // Jika row tidak ditemukan, buat baru
+        if (error.code === 'PGRST116') {
+          const { data: authUser } = await supabase.auth.getUser();
+          
+          if (authUser.user) {
+            const { error: createError } = await supabase
+              .from('users')
+              .insert({
+                id: authUser.user.id,
+                email: authUser.user.email,
+                nama: authUser.user.email?.split('@')[0] || 'User',
+                phone: settings.phone,
+                kecamatan: 'Semarang Barat',
+                kelurahan: 'Belum diisi',
+                role: 'warga',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              });
+            
+            if (createError) {
+              throw createError;
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
+  
       toast.success('Profil berhasil diupdate');
-
+  
     } catch (error: any) {
+      console.error('❌ Save profile error:', error);
       toast.error(error.message || 'Gagal menyimpan profil');
     } finally {
       setIsSaving(false);
