@@ -204,27 +204,75 @@ export default function BuatLaporanPage() {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
       
+      console.log('🔄 Attempting to upload to bucket: air-bersih');
+      
+      // Dapatkan session terlebih dahulu
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('❌ No session found');
+        toast.error('Sesi login tidak valid. Silakan login ulang.');
+        return null;
+      }
+      
       const { error: uploadError } = await supabase.storage
-        .from('laporan-images')
+        .from('air-bersih')
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false
         });
-
+  
       if (uploadError) {
-        console.error('Error uploading image:', uploadError);
+        console.error('❌ Storage upload error:', uploadError);
+        
+        // Tampilkan detail error
+        if (uploadError.message.includes('row-level security')) {
+          toast.error(
+            <div>
+              <p className="font-semibold">Kesalahan Keamanan</p>
+              <p className="text-sm mt-1">
+                Policy RLS belum diatur. Hubungi administrator.
+              </p>
+            </div>,
+            { duration: 8000 }
+          );
+        }
+        
         return null;
       }
-
+  
       // Dapatkan URL publik
       const { data } = supabase.storage
-        .from('laporan-images')
+        .from('air-bersih')
         .getPublicUrl(fileName);
-
+  
       return data.publicUrl;
     } catch (error) {
       console.error('Error in uploadImageToStorage:', error);
       return null;
+    }
+  };
+  
+  // Fungsi untuk cek apakah bucket sudah dibuat
+  const checkBucketExists = async (): Promise<boolean> => {
+    try {
+      // Coba kedua nama bucket
+      for (const bucket of ['air-bersih', 'laporan-images']) {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .list();
+        
+        if (!error) {
+          console.log(`✅ Found bucket: ${bucket}`);
+          return true;
+        }
+      }
+      
+      console.log('❌ No bucket found (air-bersih or laporan-images)');
+      return false;
+    } catch (error) {
+      console.log('Bucket check failed:', error);
+      return false;
     }
   };
 
@@ -236,39 +284,58 @@ export default function BuatLaporanPage() {
       router.push('/login');
       return;
     }
-
+  
     if (!validateForm()) {
       return;
     }
-
+  
     setIsSubmitting(true);
-
+  
     try {
       // 1. Upload foto jika ada
       let fotoUrl = '';
       if (foto) {
-        const uploadedUrl = await uploadImageToStorage(foto);
-        if (uploadedUrl) {
-          fotoUrl = uploadedUrl;
+        // Cek bucket dulu
+        const bucketExists = await checkBucketExists();
+        
+        if (!bucketExists) {
+          toast.error(
+            <div>
+              <p className="font-semibold">Bucket Storage Belum Dibuat</p>
+              <p className="text-sm mt-1">
+                Foto tidak dapat diupload. Silakan buat bucket "air-bersih" di Supabase.
+              </p>
+            </div>,
+            { duration: 6000 }
+          );
+          // Lanjut tanpa foto
+        } else {
+          const uploadedUrl = await uploadImageToStorage(foto);
+          if (uploadedUrl) {
+            fotoUrl = uploadedUrl;
+            toast.success('Foto berhasil diupload');
+          } else {
+            toast.error('Foto gagal diupload, melanjutkan tanpa foto');
+          }
         }
       }
-
+  
       // 2. Ambil data user untuk mendapatkan puskesmas_id
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('puskesmas_id')
         .eq('id', user.id)
         .single();
-
+  
       if (userError) {
         console.error('Error getting user data:', userError);
         throw new Error('Gagal mengambil data pengguna');
       }
-
+  
       if (!userData?.puskesmas_id) {
         throw new Error('Puskesmas tidak ditemukan untuk wilayah Anda');
       }
-
+  
       // 3. Buat laporan di database
       const { data: report, error: reportError } = await supabase
         .from('reports')
@@ -286,12 +353,12 @@ export default function BuatLaporanPage() {
         })
         .select()
         .single();
-
+  
       if (reportError) {
         console.error('Error creating report:', reportError);
         throw reportError;
       }
-
+  
       // 4. Buat notifikasi otomatis
       await supabase
         .from('notifications')
@@ -302,7 +369,7 @@ export default function BuatLaporanPage() {
           type: 'update',
           is_read: false
         });
-
+  
       // 5. Tampilkan pesan sukses
       toast.success('Laporan berhasil dikirim!');
       
@@ -320,7 +387,7 @@ export default function BuatLaporanPage() {
       setTimeout(() => {
         router.push('/laporan');
       }, 1500);
-
+  
     } catch (error: any) {
       console.error('Error submitting report:', error);
       

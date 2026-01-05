@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HealthWidget from '@/components/health/HealthWidget';
+import toast from 'react-hot-toast'; 
 
 // Dynamic import untuk Leaflet components (SSR false)
 const MapContainer = dynamic(
@@ -72,7 +73,7 @@ type Notification = {
   id: string;
   title: string;
   message: string;
-  type: string;
+  type: 'info' | 'warning' | 'urgent' | 'update';
   is_read: boolean;
   created_at: string;
   user_id: string | null;
@@ -369,182 +370,241 @@ export default function WargaDashboard() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
+      console.log('🔍 Fetching data for user:', user?.id);
       
       // 1. Get user data
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('kecamatan, kelurahan')
+        .select('kecamatan, kelurahan, puskesmas_id, nama')
         .eq('id', user?.id)
-        .maybeSingle();
-
+        .single();
+  
       if (userError) {
-        console.warn('Info: Data user belum lengkap', userError.message);
+        console.error('❌ User data error:', userError);
+        toast.error('Data user tidak ditemukan');
+        return;
       }
+  
+      console.log('✅ User data found:', userData);
+      
+      let sourcesData: WaterSource[] = [];
       
       if (userData?.kecamatan) {
         setUserKecamatan(userData.kecamatan);
         
-        // Set map center berdasarkan kecamatan
+        // Set map center
         if (KECAMATAN_COORDINATES[userData.kecamatan]) {
           setMapCenter(KECAMATAN_COORDINATES[userData.kecamatan]);
         }
-
-        // 2. Fetch water sources dengan koordinat
-        const { data: sourcesData, error: sourcesError } = await supabase
+  
+        // 2. Fetch water sources berdasarkan KECAMATAN user
+        const { data: fetchedSourcesData, error: sourcesError } = await supabase
           .from('water_sources')
           .select('*')
           .eq('kecamatan', userData.kecamatan)
           .limit(10);
-
+  
         if (sourcesError) {
-          console.warn('Info: Belum ada sumber air di database', sourcesError.message);
+          console.warn('Water sources error:', sourcesError);
         } else {
-          setWaterSources(sourcesData || []);
-          
-          // Jika ada sumber air dengan koordinat, set center ke yang pertama
-          const sourceWithCoords = sourcesData?.find(s => s.latitude && s.longitude);
-          if (sourceWithCoords) {
-            setMapCenter([sourceWithCoords.latitude!, sourceWithCoords.longitude!]);
-          }
+          sourcesData = fetchedSourcesData || [];
+          setWaterSources(sourcesData);
+          console.log('✅ Water sources:', sourcesData.length);
         }
       } else {
-        // Jika kecamatan tidak ditemukan
-        const { data: allSources, error: sourcesError } = await supabase
-          .from('water_sources')
-          .select('*')
-          .limit(3);
-        
-        if (!sourcesError && allSources) {
-          setWaterSources(allSources);
-        }
+        console.warn('⚠️ User does not have kecamatan data');
       }
-
-      // 3. Fetch reports
+  
+      // 3. Fetch reports personal user
       const { data: reportsData, error: reportsError } = await supabase
         .from('reports')
         .select('id, status, bau, rasa, warna, created_at, feedback')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false })
         .limit(5);
-
+  
       if (reportsError) {
-        console.log('Info: Belum ada laporan dari user ini', reportsError.message);
+        console.warn('Reports error:', reportsError);
       } else {
         setReports(reportsData || []);
       }
-
-      // 4. Fetch notifications - FIXED QUERY
-      const { data: notificationsData, error: notificationsError } = await supabase
-        .from('notifications')
-        .select('*')
-        .or(`user_id.eq.${user?.id},user_id.is.null`)
-        .order('created_at', { ascending: false });
-
-      if (notificationsError) {
-        console.log('Info: Belum ada notifikasi', notificationsError.message);
-      } else {
-        // Filter duplikat berdasarkan kombinasi unik
-        const seen = new Set();
-        const uniqueNotifications: Notification[] = [];
+  
+      // 4. Fetch notifications - Query langsung tanpa wilayahService
+      if (userData?.kecamatan) {
+        console.log(`🔔 Fetching notifications for kecamatan: ${userData.kecamatan}`);
         
-        (notificationsData || []).forEach(notification => {
-          // Normalisasi pesan untuk perbandingan yang lebih baik
-          const normalizedMessage = notification.message?.replace(/\s+/g, ' ').trim();
-          const key = `${notification.title}-${normalizedMessage}-${notification.type}`;
-          
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueNotifications.push({
-              ...notification,
-              message: normalizedMessage || notification.message
-            });
-          }
-        });
-
-        // Cek apakah ada notifikasi selamat datang
-        const hasWelcomeNotification = uniqueNotifications.some(
-          n => n.title.includes('Selamat Datang') || n.title.includes('Selamat Bergabung')
-        );
-        
-        // Buat notifikasi selamat datang jika belum ada
-        if (uniqueNotifications.length === 0 && !hasWelcomeNotification && userData?.kecamatan) {
-          try {
-            const welcomeNotification: Notification = {
-              id: 'welcome-msg-' + Date.now(),
-              title: 'Selamat Datang di Air Bersih',
-              message: `Selamat bergabung! Mulai pantau kualitas air di wilayah ${userData.kecamatan}.`,
-              type: 'info',
-              is_read: false,
-              created_at: new Date().toISOString(),
-              user_id: user?.id || null
-            };
-            uniqueNotifications.unshift(welcomeNotification);
-          } catch (insertError) {
-            console.log('Tidak bisa membuat notifikasi selamat datang');
-          }
+        // Query 1: Notifikasi untuk kecamatan spesifik user
+        const { data: kecamatanNotif, error: kecError } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('kecamatan', userData.kecamatan)
+          .order('created_at', { ascending: false })
+          .limit(5);
+  
+        if (kecError) {
+          console.warn('Kecamatan notifications error:', kecError);
         }
-
-        // Ambil 3 terbaru untuk dashboard
-        const dashboardNotifications = uniqueNotifications.slice(0, 3);
-        setNotifications(dashboardNotifications);
-
-        // Hitung notifikasi baru dari SEMUA notifikasi (bukan hanya 3 di dashboard)
-        const notifikasiBaru = uniqueNotifications.filter(n => !n.is_read).length;
+  
+        // Query 2: Notifikasi global (tanpa kecamatan)
+        const { data: globalNotif, error: globalError } = await supabase
+          .from('notifications')
+          .select('*')
+          .is('kecamatan', null)
+          .order('created_at', { ascending: false })
+          .limit(5);
+  
+        if (globalError) {
+          console.warn('Global notifications error:', globalError);
+        }
+  
+        // Gabungkan dan sortir
+        const allNotifications = [
+          ...(kecamatanNotif || []),
+          ...(globalNotif || [])
+        ].sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+  
+        // Filter duplikat
+        const seen = new Set();
+        const uniqueNotifications = allNotifications.filter((notification: any) => {
+          const key = `${notification.title}-${notification.message}-${notification.type}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+  
+        // Format ke tipe Notification
+        const formattedNotifications: Notification[] = uniqueNotifications.map((notif: any) => ({
+          id: notif.id,
+          title: notif.title,
+          message: notif.message,
+          type: notif.type,
+          is_read: notif.is_read || false,
+          created_at: notif.created_at,
+          user_id: notif.user_id || user?.id || null
+        }));
+  
+        setNotifications(formattedNotifications);
+        console.log('✅ Notifications found:', formattedNotifications.length);
+  
+        // Hitung notifikasi baru
+        const notifikasiBaru = formattedNotifications.filter(n => !n.is_read).length;
         
         // 5. Hitung statistics
         const reportsArray = reportsData || [];
-        const sourcesArray = waterSources || [];
         const pending = reportsArray.filter(r => r.status === 'pending').length;
         const diproses = reportsArray.filter(r => r.status === 'diproses').length;
         const selesai = reportsArray.filter(r => r.status === 'selesai').length;
-        const sumberAman = sourcesArray.filter(s => s.status === 'aman').length;
-
+        const sumberAman = sourcesData.filter((s: WaterSource) => s.status === 'aman').length;
+  
         setStats({
           totalLaporan: reportsArray.length,
           pending,
           diproses,
           selesai,
-          notifikasiBaru, // Ini yang benar, dari semua notifikasi
+          notifikasiBaru,
           sumberAman,
         });
+      } else {
+        // Jika user tidak punya kecamatan, tampilkan notifikasi global saja
+        const { data: globalNotif, error: globalError } = await supabase
+          .from('notifications')
+          .select('*')
+          .is('kecamatan', null)
+          .order('created_at', { ascending: false })
+          .limit(8);
+  
+        if (!globalError && globalNotif) {
+          const formattedNotifications: Notification[] = globalNotif.map((notif: any) => ({
+            id: notif.id,
+            title: notif.title,
+            message: notif.message,
+            type: notif.type,
+            is_read: notif.is_read || false,
+            created_at: notif.created_at,
+            user_id: notif.user_id || user?.id || null
+          }));
+  
+          setNotifications(formattedNotifications);
+          
+          const notifikasiBaru = formattedNotifications.filter(n => !n.is_read).length;
+          
+          const reportsArray = reportsData || [];
+          const pending = reportsArray.filter(r => r.status === 'pending').length;
+          const diproses = reportsArray.filter(r => r.status === 'diproses').length;
+          const selesai = reportsArray.filter(r => r.status === 'selesai').length;
+  
+          setStats(prev => ({
+            ...prev,
+            totalLaporan: reportsArray.length,
+            pending,
+            diproses,
+            selesai,
+            notifikasiBaru,
+          }));
+        }
       }
-
+  
       setDataFetched(true);
-
+      console.log('✅ Data fetch complete');
+  
     } catch (error: any) {
-      console.log('Informasi: Sedang memuat data awal...', error.message);
+      console.error('❌ Fetch data error:', error);
+      toast.error('Gagal memuat data dashboard');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Fungsi untuk menandai notifikasi sebagai sudah dibaca
   const markNotificationAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
+      console.log('📌 Marking notification as read:', notificationId);
+      
+      // 1. Update status di tabel notifications
+      const { error: updateError } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('id', notificationId)
-        .eq('user_id', user?.id);
+        .eq('id', notificationId);
 
-      if (error && error.code !== 'PGRST116') {
-        console.log('Error marking notification as read:', error.message);
-        return;
+      if (updateError) {
+        console.error('❌ Error updating notification:', updateError);
+        
+        // Coba alternatif: insert ke notification_reads
+        const { error: insertError } = await supabase
+          .from('notification_reads')
+          .insert({
+            user_id: user?.id,
+            notification_id: notificationId,
+            read_at: new Date().toISOString()
+          });
+
+        if (insertError) {
+          console.error('❌ Error inserting to notification_reads:', insertError);
+          return;
+        }
       }
 
-      // Update local state untuk notifikasi spesifik user
+      // 2. Update local state untuk UI
       setNotifications(prev => 
         prev.map(notif => 
-          notif.id === notificationId ? { ...notif, is_read: true } : notif
+          notif.id === notificationId 
+            ? { ...notif, is_read: true } 
+            : notif
         )
       );
 
-      // Update stats
+      // 3. Update stats (kurangi notifikasi baru)
       setStats(prev => ({
         ...prev,
         notifikasiBaru: Math.max(0, prev.notifikasiBaru - 1)
       }));
+
+      console.log('✅ Notification marked as read');
+
     } catch (error) {
-      console.log('Tidak bisa update status notifikasi:', error);
+      console.error('❌ Error in markNotificationAsRead:', error);
     }
   };
 
@@ -685,6 +745,49 @@ export default function WargaDashboard() {
         />
       </div>
 
+      {/* FULL WIDTH LAPORAN TERBARU */}
+        <div className="bg-white rounded-xl shadow overflow-hidden">
+          <div className="px-6 py-4 border-b flex justify-between items-center">
+            <h2 className="text-lg font-semibold text-gray-800">Laporan Terbaru</h2>
+            <Link
+              href="/lapor"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+            >
+              + Buat Laporan
+            </Link>
+          </div>
+
+          <div className="divide-y">
+            {reports.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                <Droplets className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                <p>Belum ada laporan</p>
+              </div>
+            ) : (
+              reports.map((report) => (
+                <div key={report.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex justify-between">
+                    <div>
+                      <span className="font-medium">
+                        {getStatusText(report.status)}
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        {new Date(report.created_at).toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/status/${report.id}`}
+                      className="text-blue-600 text-sm"
+                    >
+                      Detail →
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
       {/* PETA INTERAKTIF */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
         <div className="px-6 py-4 border-b flex justify-between items-center">
@@ -734,7 +837,7 @@ export default function WargaDashboard() {
                     : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                Aman ({waterSources.filter(s => s.status === 'aman').length})
+                Aman ({waterSources.filter((s: WaterSource) => s.status === 'aman').length})
               </button>
               <button
                 onClick={() => setMapFilter('rawan')}
@@ -744,7 +847,7 @@ export default function WargaDashboard() {
                     : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                Rawan ({waterSources.filter(s => s.status === 'rawan').length})
+                Rawan ({waterSources.filter((s: WaterSource) => s.status === 'rawan').length})
               </button>
               <button
                 onClick={() => setMapFilter('tidak_aman')}
@@ -754,7 +857,7 @@ export default function WargaDashboard() {
                     : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                Tidak Aman ({waterSources.filter(s => s.status === 'tidak_aman').length})
+                Tidak Aman ({waterSources.filter((s: WaterSource) => s.status === 'tidak_aman').length})
               </button>
             </div>
           </div>
@@ -813,220 +916,64 @@ export default function WargaDashboard() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Laporan Terbaru */}
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <div className="px-6 py-4 border-b flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-800">Laporan Terbaru</h2>
-            <Link 
-              href="/lapor" 
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-            >
-              + Buat Laporan
-            </Link>
-          </div>
-          
-          <div className="divide-y">
-            {reports.length === 0 ? (
-              <div className="p-6 text-center text-gray-500">
-                <Droplets className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p>Belum ada laporan</p>
-                <p className="text-sm text-gray-400 mt-1">Mulai dengan melaporkan kondisi air di sekitar Anda</p>
-                <Link 
-                  href="/lapor" 
-                  className="mt-4 inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                  Buat Laporan Pertama
-                </Link>
-              </div>
-            ) : (
-              reports.map((report) => (
-                <div key={report.id} className="p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        {getStatusIcon(report.status)}
-                        <span className={`font-medium ${
-                          report.status === 'selesai' ? 'text-green-600' :
-                          report.status === 'diproses' ? 'text-blue-600' :
-                          'text-yellow-600'
-                        }`}>
-                          {getStatusText(report.status)}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600 space-y-1">
-                        {report.bau && <p>Bau: <span className="font-medium">{report.bau}</span></p>}
-                        {report.rasa && <p>Rasa: <span className="font-medium">{report.rasa}</span></p>}
-                        {report.warna && <p>Warna: <span className="font-medium">{report.warna}</span></p>}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {new Date(report.created_at).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                    </div>
-                    <Link 
-                      href={`/status/${report.id}`}
-                      className="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap"
-                    >
-                      Lihat Detail →
-                    </Link>
-                  </div>
-                  {report.feedback && (
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-700 border border-blue-200">
-                      <span className="font-medium">Feedback dari Puskesmas: </span>
-                      {report.feedback}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+      <div className="space-y-6">
 
-        {/* Sumber Air & Notifikasi */}
-        <div className="space-y-6">
-          {/* Sumber Air Aman */}
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <div className="px-6 py-4 border-b">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-800">Sumber Air Aman</h2>
-                <span className="text-sm text-gray-500">{userKecamatan || 'Terdekat'}</span>
+        {/* TOP GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* NOTIFIKASI TERBARU (DOMINAN) */}
+          <div className="lg:col-span-2 bg-white rounded-xl shadow overflow-hidden">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-gray-800">Notifikasi Terbaru</h2>
+                {stats.notifikasiBaru > 0 && (
+                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                    {stats.notifikasiBaru} baru
+                  </span>
+                )}
               </div>
-            </div>
-            
-            <div className="divide-y">
-              {safeWaterSources.length === 0 ? (
-                <div className="p-6 text-center text-gray-500">
-                  <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p>Belum ada sumber air terdaftar</p>
-                  <p className="text-sm text-gray-400 mt-1">Puskesmas sedang memetakan sumber air di wilayah Anda</p>
-                  <div className="mt-4 text-xs text-gray-500 space-y-1">
-                    <p>• Gunakan air kemasan sementara</p>
-                    <p>• Rebus air sampai mendidih</p>
-                    <p>• Laporkan jika menemukan masalah air</p>
-                  </div>
-                </div>
-              ) : (
-                safeWaterSources.map((source) => (
-                  <div key={source.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="bg-green-100 p-2 rounded-lg mt-1">
-                        <MapPin className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-medium text-gray-800 mb-1">{source.nama}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{source.alamat}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">
-                            {source.jenis}
-                          </span>
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                            Status: {source.status}
-                          </span>
-                          {source.last_checked ? (
-                            <span className="text-xs text-gray-500">
-                              Dicek: {new Date(source.last_checked).toLocaleDateString('id-ID')}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-gray-500">
-                              Belum dicek
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            
-            <div className="px-6 py-4 border-t">
-              <Link 
-                href="/sumber-air"
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-2"
-              >
-                <MapPin className="w-4 h-4" />
-                {safeWaterSources.length > 0 ? 'Lihat semua sumber air →' : 'Cari sumber air lainnya →'}
+              <Link href="/notifikasi" className="text-blue-600 text-sm font-medium">
+                Lihat semua →
               </Link>
             </div>
-          </div>
 
-          <div className="mt-8">
-            <HealthWidget/>
-          </div>
-
-          {/* Notifikasi Terbaru */}
-          <div className="bg-white rounded-xl shadow overflow-hidden">
-            <div className="px-6 py-4 border-b">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-gray-800">Notifikasi Terbaru</h2>
-                  {stats.notifikasiBaru > 0 && (
-                    <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                      {stats.notifikasiBaru} baru
-                    </span>
-                  )}
-                </div>
-                <Link 
-                  href="/notifikasi"
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                >
-                  Lihat semua →
-                </Link>
-              </div>
-            </div>
-            
             <div className="divide-y">
               {notifications.length === 0 ? (
                 <div className="p-6 text-center text-gray-500">
                   <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                   <p>Belum ada notifikasi</p>
-                  <p className="text-sm text-gray-400 mt-1">Anda akan mendapat notifikasi saat ada update</p>
                 </div>
               ) : (
                 notifications.map((notification) => (
-                  <div 
-                    key={notification.id} 
-                    className={`p-4 hover:bg-gray-50 transition-colors ${
+                  <div
+                    key={notification.id}
+                    className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                       !notification.is_read ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                     }`}
-                    onClick={() => !notification.is_read && markNotificationAsRead(notification.id)}
+                    onClick={() =>
+                      !notification.is_read && markNotificationAsRead(notification.id)
+                    }
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-1">
                         {getNotificationIcon(notification.type)}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-medium text-gray-800">{notification.title}</h3>
-                          <div className="flex items-center gap-2">
-                            {!notification.is_read && (
-                              <span className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                                Baru
-                              </span>
-                            )}
-                            <span className={`px-2 py-1 text-xs rounded-full text-white ${getNotificationBadgeColor(notification.type)}`}>
-                              {notification.type === 'urgent' ? 'Darurat' : 
-                               notification.type === 'warning' ? 'Peringatan' : 
-                               notification.type === 'update' ? 'Update' : 'Info'}
+                        <div className="flex justify-between mb-1">
+                          <h3 className="font-medium text-gray-800">
+                            {notification.title}
+                          </h3>
+                          {!notification.is_read && (
+                            <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                              Baru
                             </span>
-                          </div>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-600 line-clamp-2">{notification.message}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {notification.message}
+                        </p>
                         <p className="text-xs text-gray-500 mt-2">
-                          {new Date(notification.created_at).toLocaleDateString('id-ID', {
-                            weekday: 'short',
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {new Date(notification.created_at).toLocaleString('id-ID')}
                         </p>
                       </div>
                     </div>
@@ -1035,8 +982,51 @@ export default function WargaDashboard() {
               )}
             </div>
           </div>
+
+          {/* RIGHT COLUMN */}
+          <div className="space-y-6">
+
+            {/* SUMBER AIR AMAN */}
+            <div className="bg-white rounded-xl shadow overflow-hidden">
+              <div className="px-6 py-4 border-b flex justify-between">
+                <h2 className="text-lg font-semibold text-gray-800">Sumber Air Aman</h2>
+                <span className="text-sm text-gray-500">{userKecamatan}</span>
+              </div>
+
+              <div className="divide-y">
+                {safeWaterSources.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">
+                    <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <p>Belum ada sumber air aman</p>
+                  </div>
+                ) : (
+                  safeWaterSources.map((source) => (
+                    <div key={source.id} className="p-4 flex gap-3">
+                      <div className="bg-green-100 p-2 rounded-lg">
+                        <MapPin className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">{source.nama}</p>
+                        <p className="text-sm text-gray-600">{source.alamat}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="px-6 py-4 border-t">
+                <Link href="/sumber-air" className="text-blue-600 text-sm font-medium">
+                  Lihat semua →
+                </Link>
+              </div>
+            </div>
+
+            {/* HEALTH */}
+            <HealthWidget />
+          </div>
         </div>
       </div>
+
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
