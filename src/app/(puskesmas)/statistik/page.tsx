@@ -120,30 +120,51 @@ export default function StatistikPage() {
 
       console.log('📋 Total reports found:', reportsData?.length || 0)
 
-      // 2. Fetch lab results to calculate water quality
-      const { data: labResultsData, error: labError } = await supabase
-        .from('lab_results')
-        .select('safety_level, created_at')
-        .order('created_at', { ascending: false })
+      // 2. Fetch lab results for these reports
+      const reportIds = reportsData?.map(r => r.id) || []
+      let labResultsData: any[] = []
+      
+      if (reportIds.length > 0) {
+        try {
+          const { data, error: labError } = await supabase
+            .from('lab_results')
+            .select('*')
+            .in('report_id', reportIds)
+            .order('created_at', { ascending: false })
 
-      if (labError) {
-        console.error('Lab results fetch error:', labError)
+          if (labError) {
+            console.warn('⚠️ Lab results fetch error (non-critical):', labError.message)
+          } else if (data) {
+            labResultsData = data
+            console.log('🔬 Lab results found:', labResultsData.length)
+          }
+        } catch (labFetchError: any) {
+          console.warn('⚠️ Lab results fetch failed (continuing without):', labFetchError.message)
+        }
       }
 
       // 3. Fetch active users in kecamatan
-      const { data: usersData, error: usersError } = await supabase
-        .from('users')
-        .select('id, created_at')
-        .eq('kecamatan', profile.kecamatan)
-        .eq('role', 'warga')
-        .gte('created_at', getDateRangeStart())
+      let usersData: any[] = []
+      
+      try {
+        const { data, error: usersError } = await supabase
+          .from('users')
+          .select('id, created_at')
+          .eq('kecamatan', profile.kecamatan)
+          .eq('role', 'warga')
+          .gte('created_at', getDateRangeStart())
 
-      if (usersError) {
-        console.error('Users fetch error:', usersError)
+        if (usersError) {
+          console.warn('⚠️ Users fetch error (non-critical):', usersError.message)
+        } else if (data) {
+          usersData = data
+        }
+      } catch (usersFetchError: any) {
+        console.warn('⚠️ Users fetch failed (continuing with defaults):', usersFetchError.message)
       }
 
       // 4. Calculate statistics
-      await calculateStatistics(reportsData || [], labResultsData || [], usersData || [])
+      await calculateStatistics(reportsData || [], labResultsData, usersData)
 
     } catch (error: any) {
       console.error('❌ Error fetching statistics:', error)
@@ -154,162 +175,171 @@ export default function StatistikPage() {
     }
   }
 
-const calculateStatistics = async (
-  reports: any[], 
-  labResults: any[], 
-  users: any[]
-) => {
-  try {
-    console.log('📊 Calculating statistics from:', {
-      reports: reports.length,
-      labResults: labResults.length,
-      users: users.length
-    });
-
-    // Total reports
-    const totalReports = reports.length;
-    
-    // Status breakdown
-    const resolvedReports = reports.filter(r => r.status === 'selesai').length;
-    const pendingReports = reports.filter(r => r.status === 'pending').length;
-    const rejectedReports = reports.filter(r => r.status === 'ditolak').length;
-    const processingReports = reports.filter(r => r.status === 'diproses').length;
-
-    // Calculate average response time (days)
-    let averageResponseTime = 0;
-    const completedReports = reports.filter(r => 
-      r.status === 'selesai' && r.created_at && r.updated_at
-    );
-    
-    if (completedReports.length > 0) {
-      const totalDays = completedReports.reduce((sum, report) => {
-        const created = new Date(report.created_at);
-        const updated = new Date(report.updated_at || report.created_at);
-        const days = (updated.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
-        return sum + days;
-      }, 0);
-      averageResponseTime = Math.round((totalDays / completedReports.length) * 10) / 10;
-    }
-
-    // ✅ FIX: Calculate water quality from lab results (KEY-VALUE structure)
-    let waterQualityGood = 0;
-    let waterQualityPoor = 0;
-    let waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
-
-    if (labResults.length > 0) {
-      // Group lab results by report_id
-      const labByReport = new Map<string, any[]>();
-      labResults.forEach(lab => {
-        const existing = labByReport.get(lab.report_id) || [];
-        existing.push(lab);
-        labByReport.set(lab.report_id, existing);
+  const calculateStatistics = async (
+    reports: any[], 
+    labResults: any[], 
+    users: any[]
+  ) => {
+    try {
+      console.log('📊 Calculating statistics from:', {
+        reports: reports.length,
+        labResults: labResults.length,
+        users: users.length
       });
 
-      console.log('🔬 Lab results grouped by report:', labByReport.size, 'unique reports');
+      // Total reports
+      const totalReports = reports.length;
+      
+      // Status breakdown
+      const resolvedReports = reports.filter(r => r.status === 'selesai').length;
+      const pendingReports = reports.filter(r => r.status === 'pending').length;
+      const rejectedReports = reports.filter(r => r.status === 'ditolak').length;
+      const processingReports = reports.filter(r => r.status === 'diproses').length;
 
-      // Get overall_safety for each report
-      let safeCount = 0;
-      let warningCount = 0;
-      let dangerCount = 0;
-
-      labByReport.forEach((rows, reportId) => {
-        // Find overall_safety row
-        const overallRow = rows.find(r => r.parameter === 'overall_safety');
-        if (overallRow) {
-          const safetyLevel = overallRow.value || overallRow.status;
-          if (safetyLevel === 'safe') safeCount++;
-          else if (safetyLevel === 'warning') warningCount++;
-          else if (safetyLevel === 'danger') dangerCount++;
-        }
-      });
-
-      const totalTests = labByReport.size;
-
-      if (totalTests > 0) {
-        waterQualityGood = Math.round((safeCount / totalTests) * 100);
-        waterQualityPoor = Math.round(((warningCount + dangerCount) / totalTests) * 100);
-        
-        waterQualityData = {
-          good: Math.round((safeCount / totalTests) * 100),
-          warning: Math.round((warningCount / totalTests) * 100),
-          danger: Math.round((dangerCount / totalTests) * 100),
-          total: totalTests
-        };
-
-        console.log('✅ Water quality calculated:', waterQualityData);
+      // Calculate average response time (days)
+      let averageResponseTime = 0;
+      const completedReports = reports.filter(r => 
+        r.status === 'selesai' && r.created_at && r.updated_at
+      );
+      
+      if (completedReports.length > 0) {
+        const totalDays = completedReports.reduce((sum, report) => {
+          const created = new Date(report.created_at);
+          const updated = new Date(report.updated_at || report.created_at);
+          const days = (updated.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+          return sum + days;
+        }, 0);
+        averageResponseTime = Math.round((totalDays / completedReports.length) * 10) / 10;
       }
-    } else {
-      console.log('📭 No lab results found');
+
+      // ✅ FIXED: Group lab results by report_id and parameter untuk menghitung water quality
+      let waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
+
+      if (labResults.length > 0) {
+        // Group lab results by report_id
+        const labByReport = new Map<string, any[]>();
+        
+        labResults.forEach(lab => {
+          if (lab.report_id) {
+            const existing = labByReport.get(lab.report_id) || [];
+            existing.push(lab);
+            labByReport.set(lab.report_id, existing);
+          }
+        });
+
+        console.log('🔬 Lab results grouped by report:', labByReport.size, 'unique reports');
+
+        // Get overall_safety for each report
+        let safeCount = 0;
+        let warningCount = 0;
+        let dangerCount = 0;
+
+        labByReport.forEach((rows, reportId) => {
+          // Find overall_safety row
+          const overallRow = rows.find(r => r.parameter === 'overall_safety');
+          if (overallRow) {
+            const safetyLevel = (overallRow.status || '').toLowerCase();
+            
+            console.log(`Report ${reportId} safety level:`, safetyLevel);
+            
+            if (safetyLevel === 'aman' || safetyLevel === 'safe' || safetyLevel === '1') {
+              safeCount++;
+            } else if (safetyLevel === 'warning' || safetyLevel === '2') {
+              warningCount++;
+            } else if (safetyLevel === 'bahaya' || safetyLevel === 'danger' || safetyLevel === '3') {
+              dangerCount++;
+            }
+          }
+        });
+
+        const totalTests = safeCount + warningCount + dangerCount;
+
+        if (totalTests > 0) {
+          waterQualityData = {
+            good: Math.round((safeCount / totalTests) * 100),
+            warning: Math.round((warningCount / totalTests) * 100),
+            danger: Math.round((dangerCount / totalTests) * 100),
+            total: totalTests
+          };
+
+          console.log('✅ Water quality calculated:', waterQualityData);
+        } else {
+          console.log('📭 No valid lab tests found for water quality calculation');
+          // Default values jika tidak ada data
+          waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
+        }
+      } else {
+        console.log('📭 No lab results available');
+        waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
+      }
+
+      // Active users
+      const activeUsers = users.length;
+
+      // Total lab tests (count unique report_ids with overall_safety parameter)
+      const totalLabTests = waterQualityData.total;
+
+      console.log('📈 Total lab tests:', totalLabTests);
+
+      // Update stats state
+      setStats({
+        totalReports,
+        resolvedReports,
+        pendingReports,
+        rejectedReports,
+        processingReports,
+        averageResponseTime,
+        waterQualityGood: waterQualityData.good,
+        waterQualityPoor: waterQualityData.warning + waterQualityData.danger,
+        activeUsers,
+        totalLabTests
+      });
+
+      // Calculate trend data
+      const trendData = calculateTrendData(reports);
+      setTrendData(trendData);
+
+      // Calculate problem areas
+      const problemAreasData = calculateProblemAreas(reports);
+      setProblemAreas(problemAreasData);
+
+      // Set water quality data
+      setWaterQualityData(waterQualityData);
+
+      console.log('✅ Statistics calculated successfully');
+      
+    } catch (error) {
+      console.error('❌ Error calculating statistics:', error);
     }
+  };
 
-    // Active users
-    const activeUsers = users.length;
-
-    // Total lab tests (count unique report_ids)
-    const uniqueReportIds = new Set(labResults.map(lab => lab.report_id));
-    const totalLabTests = uniqueReportIds.size;
-
-    console.log('📈 Total lab tests (unique reports):', totalLabTests);
-
-    // Update stats state
-    setStats({
-      totalReports,
-      resolvedReports,
-      pendingReports,
-      rejectedReports,
-      processingReports,
-      averageResponseTime,
-      waterQualityGood,
-      waterQualityPoor,
-      activeUsers,
-      totalLabTests
-    });
-
-    // Calculate trend data
-    const trendData = calculateTrendData(reports);
-    setTrendData(trendData);
-
-    // Calculate problem areas
-    const problemAreasData = calculateProblemAreas(reports);
-    setProblemAreas(problemAreasData);
-
-    // Set water quality data
-    setWaterQualityData(waterQualityData);
-
-    console.log('✅ Statistics calculated successfully');
+const calculateTrendData = (reports: any[]): ReportTrend[] => {
+  const trend: ReportTrend[] = []
+  const days = 7 // Last 7 days
+  
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    const dateStr = date.toLocaleDateString('id-ID', { weekday: 'short' })
     
-  } catch (error) {
-    console.error('❌ Error calculating statistics:', error);
+    const startOfDay = new Date(date)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(date)
+    endOfDay.setHours(23, 59, 59, 999)
+    
+    const dayReports = reports.filter(report => {
+      const reportDate = new Date(report.created_at)
+      return reportDate >= startOfDay && reportDate <= endOfDay
+    })
+    
+    trend.push({
+      date: dateStr,
+      count: dayReports.length
+    })
   }
-};
-
-  const calculateTrendData = (reports: any[]): ReportTrend[] => {
-    const trend: ReportTrend[] = []
-    const days = 7 // Last 7 days
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      const dateStr = date.toLocaleDateString('id-ID', { weekday: 'short' })
-      
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-      
-      const dayReports = reports.filter(report => {
-        const reportDate = new Date(report.created_at)
-        return reportDate >= startOfDay && reportDate <= endOfDay
-      })
-      
-      trend.push({
-        date: dateStr,
-        count: dayReports.length
-      })
-    }
-    
-    return trend
-  }
+  
+  return trend
+}
 
   const calculateProblemAreas = (reports: any[]): ProblemArea[] => {
     const areaMap: Record<string, { count: number, kecamatan: string }> = {}
@@ -403,7 +433,14 @@ const calculateStatistics = async (
           item.reports.toString(), 
           item.kecamatan,
           item.trend === 'up' ? 'Meningkat' : item.trend === 'down' ? 'Menurun' : 'Stabil'
-        ])
+        ]),
+        [],
+        ['KUALITAS AIR BERDASARKAN LAB'],
+        ['Status', 'Jumlah Sampel', 'Persentase'],
+        ['Aman', waterQualityData.total > 0 ? waterQualityData.good.toString() : '0', `${waterQualityData.good}%`],
+        ['Waspada', waterQualityData.total > 0 ? waterQualityData.warning.toString() : '0', `${waterQualityData.warning}%`],
+        ['Bahaya', waterQualityData.total > 0 ? waterQualityData.danger.toString() : '0', `${waterQualityData.danger}%`],
+        ['Total', waterQualityData.total.toString(), '100%']
       ]
 
       const csv = csvContent.map(row => row.join(',')).join('\n')
@@ -432,19 +469,13 @@ const calculateStatistics = async (
   if (isLoading && !isRefreshing) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
-      
-      <div className="relative mb-6">
-        <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
-        <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+        <div className="relative mb-6">
+          <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
+          <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+        </div>
+        <h2 className="text-xl font-bold text-blue-700">Air Bersih</h2>
+        <p className="text-sm text-gray-600">Memuat statistik...</p>
       </div>
-
-      <h2 className="text-xl font-bold text-blue-700">
-        Air Bersih
-      </h2>
-      <p className="text-sm text-gray-600">
-        Memuat data laporan...
-      </p>
-    </div>
     )
   }
 
@@ -548,6 +579,53 @@ const calculateStatistics = async (
         />
       </div>
 
+      {/* Water Quality Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Air Aman"
+          value={`${waterQualityData.good}%`}
+          icon={CheckCircle}
+          iconBg="bg-green-100"
+          iconColor="text-green-600"
+          trend={waterQualityData.good > 70 ? "up" : "down"}
+          trendValue={waterQualityData.good > 70 ? "Kondisi baik" : "Perlu perbaikan"}
+          description={`${waterQualityData.good} dari ${waterQualityData.total} sampel`}
+        />
+        
+        <StatCard
+          title="Air Waspada"
+          value={`${waterQualityData.warning}%`}
+          icon={AlertTriangle}
+          iconBg="bg-yellow-100"
+          iconColor="text-yellow-600"
+          trend={waterQualityData.warning > 20 ? "up" : "down"}
+          trendValue={waterQualityData.warning > 20 ? "Perlu perhatian" : "Dalam batas"}
+          description={`${waterQualityData.warning} dari ${waterQualityData.total} sampel`}
+        />
+        
+        <StatCard
+          title="Air Bahaya"
+          value={`${waterQualityData.danger}%`}
+          icon={AlertTriangle}
+          iconBg="bg-red-100"
+          iconColor="text-red-600"
+          trend={waterQualityData.danger > 10 ? "up" : "down"}
+          trendValue={waterQualityData.danger > 10 ? "Darurat" : "Terkendali"}
+          description={`${waterQualityData.danger} dari ${waterQualityData.total} sampel`}
+        />
+        
+        <StatCard
+          title="Total Tes Lab"
+          value={stats.totalLabTests}
+          icon={Activity}
+          iconBg="bg-green-100"
+          iconColor="text-green-600"
+          trend="up"
+          trendValue={`${stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}%`}
+          description="Analisis laboratorium"
+        />
+      </div>
+
       {/* Additional Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -573,17 +651,6 @@ const calculateStatistics = async (
         />
         
         <StatCard
-          title="Tes Lab Dilakukan"
-          value={stats.totalLabTests}
-          icon={Activity}
-          iconBg="bg-green-100"
-          iconColor="text-green-600"
-          trend="up"
-          trendValue={`${stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}%`}
-          description="Analisis laboratorium"
-        />
-        
-        <StatCard
           title="Diproses"
           value={stats.processingReports}
           icon={Filter}
@@ -592,6 +659,17 @@ const calculateStatistics = async (
           trend="stable"
           trendValue={`${stats.totalReports > 0 ? Math.round((stats.processingReports / stats.totalReports) * 100) : 0}%`}
           description="Sedang ditangani"
+        />
+        
+        <StatCard
+          title="Cakupan Lab"
+          value={`${stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}%`}
+          icon={Droplets}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-600"
+          trend={stats.totalReports > 0 && (stats.totalLabTests / stats.totalReports) > 0.8 ? "up" : "down"}
+          trendValue={stats.totalReports > 0 && (stats.totalLabTests / stats.totalReports) > 0.8 ? "Tinggi" : "Rendah"}
+          description="Persentase laporan dites"
         />
       </div>
 
@@ -619,7 +697,7 @@ const calculateStatistics = async (
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
-                  className="bg-green-600 h-3 rounded-full" 
+                  className="bg-green-600 h-3 rounded-full transition-all duration-500" 
                   style={{ width: `${waterQualityData.good}%` }}
                 ></div>
               </div>
@@ -634,7 +712,7 @@ const calculateStatistics = async (
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
-                  className="bg-yellow-600 h-3 rounded-full" 
+                  className="bg-yellow-600 h-3 rounded-full transition-all duration-500" 
                   style={{ width: `${waterQualityData.warning}%` }}
                 ></div>
               </div>
@@ -649,7 +727,7 @@ const calculateStatistics = async (
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div 
-                  className="bg-red-600 h-3 rounded-full" 
+                  className="bg-red-600 h-3 rounded-full transition-all duration-500" 
                   style={{ width: `${waterQualityData.danger}%` }}
                 ></div>
               </div>
@@ -660,15 +738,21 @@ const calculateStatistics = async (
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
                 <div className="text-2xl font-bold text-green-600">{waterQualityData.good}%</div>
-                <div className="text-sm text-gray-500">Aman</div>
+                <div className="text-sm text-gray-500">
+                  {waterQualityData.total > 0 ? Math.round((waterQualityData.good / 100) * waterQualityData.total) : 0} sampel
+                </div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-yellow-600">{waterQualityData.warning}%</div>
-                <div className="text-sm text-gray-500">Waspada</div>
+                <div className="text-sm text-gray-500">
+                  {waterQualityData.total > 0 ? Math.round((waterQualityData.warning / 100) * waterQualityData.total) : 0} sampel
+                </div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-red-600">{waterQualityData.danger}%</div>
-                <div className="text-sm text-gray-500">Bahaya</div>
+                <div className="text-sm text-gray-500">
+                  {waterQualityData.total > 0 ? Math.round((waterQualityData.danger / 100) * waterQualityData.total) : 0} sampel
+                </div>
               </div>
             </div>
           </div>
@@ -793,6 +877,10 @@ const calculateStatistics = async (
                 <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                 <span><strong>Laporan pending:</strong> {stats.pendingReports} ({stats.totalReports > 0 ? Math.round((stats.pendingReports / stats.totalReports) * 100) : 0}%)</span>
               </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                <span><strong>Air aman:</strong> {waterQualityData.good}% ({waterQualityData.total > 0 ? Math.round((waterQualityData.good / 100) * waterQualityData.total) : 0} sampel)</span>
+              </li>
             </ul>
           </div>
           <div>
@@ -808,6 +896,10 @@ const calculateStatistics = async (
               <li className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
                 <span><strong>Cakupan tes lab:</strong> {stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}% dari laporan</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+                <span><strong>Air bahaya:</strong> {waterQualityData.danger}% ({waterQualityData.total > 0 ? Math.round((waterQualityData.danger / 100) * waterQualityData.total) : 0} sampel)</span>
               </li>
             </ul>
           </div>

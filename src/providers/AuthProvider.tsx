@@ -164,10 +164,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error('❌ Auth init error:', error);
       } finally {
-        // SET LOADING FALSE SETELAH 2 DETIK MAKSIMAL
-        setTimeout(() => {
-          setIsLoading(false);
-        }, 2000);
+        // TIDAK PERLU SET TIMEOUT, LANGSUNG SET LOADING FALSE
+        setIsLoading(false);
       }
     };
 
@@ -274,23 +272,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ✅ LOADING STATE YANG LEBIH BAIK
+  // ✅ LOADING STATE YANG LEBIH CEPAT
   if (isLoading) {
     return (
-     <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
-      
-      <div className="relative mb-6">
-        <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
-        <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
+        <div className="relative mb-4">
+          <div className="w-12 h-12 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        
+        <h2 className="text-lg font-semibold text-blue-700 mb-1">
+          Air Bersih
+        </h2>
+        <p className="text-sm text-gray-500">
+          Memuat aplikasi...
+        </p>
       </div>
-
-      <h2 className="text-xl font-bold text-blue-700">
-        Air Bersih
-      </h2>
-      <p className="text-sm text-gray-600">
-        Memuat data laporan...
-      </p>
-    </div>
     );
   }
 

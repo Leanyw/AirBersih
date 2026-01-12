@@ -16,54 +16,22 @@ import {
   ChevronRight,
   Filter,
   Search,
-  Download
+  Download,
+  Clock,
+  XCircle,
+  Activity,
+  AlertCircle,
+  RefreshCw,
+  Shield,
+  Thermometer,
+  Droplets
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 
-// Types sesuai dengan table reports
-interface ReportRow {
-  id: string;
-  user_id: string;
-  foto_url: string;
-  bau: string;
-  rasa: string;
-  warna: string;
-  lokasi: string;
-  keterangan: string;
-  status: 'pending' | 'diproses' | 'selesai' | 'ditolak';
-  puskesmas_id: string | null;
-  kecamatan: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface UserRow {
-  id: string;
-  nama: string;
-  phone: string;
-  email: string;
-}
-
-interface LabResultRow {
-  id: string;
-  report_id: string;
-  bacteria_count: number;
-  ph_level: number;
-  turbidity: number;
-  chlorine: number;
-  heavy_metals: boolean;
-  e_coli_present: boolean;
-  total_dissolved_solids: number;
-  test_date: string;
-  technician_notes: string;
-  safety_level: 'safe' | 'warning' | 'danger';
-  technician_id: string;
-  created_at: string;
-}
-
+// Types
 interface WaterReport {
   id: string;
   user_id: string;
@@ -77,8 +45,24 @@ interface WaterReport {
   kecamatan: string;
   created_at: string;
   updated_at: string;
-  user: UserRow;
-  lab_result?: LabResultRow;
+  users?: {
+    nama: string;
+    phone: string;
+    email: string;
+  };
+  lab_result?: {
+    report_id: string;
+    bacteria_count: number;
+    ph_level: number;
+    turbidity: number;
+    chlorine: number;
+    heavy_metals: boolean;
+    e_coli_present: boolean;
+    total_dissolved_solids: number;
+    test_date: string;
+    technician_notes: string;
+    safety_level: 'safe' | 'warning' | 'danger';
+  };
 }
 
 interface LabTestForm {
@@ -93,7 +77,7 @@ interface LabTestForm {
   technician_notes: string;
 }
 
-// Fungsi analisis keamanan air dengan default values
+// Fungsi analisis keamanan air
 const analyzeWaterSafety = (params: {
   bacteria_count?: number;
   ph_level?: number;
@@ -167,84 +151,41 @@ const analyzeWaterSafety = (params: {
   return { safety_level, score, issues };
 };
 
-// Fungsi helper untuk format tanggal dengan error handling
+// Helper functions
 const formatDateSafe = (dateString: string | null | undefined, formatStr: string = 'dd MMM yyyy'): string => {
   if (!dateString) return 'Tanggal tidak tersedia';
-  
   try {
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return 'Tanggal tidak valid';
-    }
+    if (isNaN(date.getTime())) return 'Tanggal tidak valid';
     return format(date, formatStr, { locale: id });
-  } catch (error) {
-    console.error('Error formatting date:', error);
+  } catch {
     return 'Tanggal tidak valid';
   }
 };
 
-const formatDateTimeSafe = (dateString: string | null | undefined): string => {
-  if (!dateString) return 'Tanggal tidak tersedia';
-  
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return 'Tanggal tidak valid';
+const getConditionText = (condition: string, type: 'bau' | 'rasa' | 'warna') => {
+  const texts: Record<string, Record<string, string>> = {
+    bau: {
+      'tidak_berbau': 'Tidak Berbau',
+      'berbau_besi': 'Berbau Besi',
+      'berbau_busuk': 'Berbau Busuk',
+      'berbau_kaporit': 'Berbau Kaporit'
+    },
+    rasa: {
+      'normal': 'Normal',
+      'tidak_normal': 'Tidak Normal',
+      'pahit': 'Pahit',
+      'asin': 'Asin'
+    },
+    warna: {
+      'jernih': 'Jernih',
+      'keruh': 'Keruh',
+      'kecoklatan': 'Kecoklatan',
+      'kehijauan': 'Kehijauan'
     }
-    return date.toLocaleDateString('id-ID', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (error) {
-    console.error('Error formatting datetime:', error);
-    return 'Tanggal tidak valid';
-  }
-};
-
-// Helper untuk mendapatkan nilai yang aman
-const getSafeValue = (value: any, defaultValue: any = '') => {
-  if (value === null || value === undefined) return defaultValue;
-  return value;
-};
-
-const transformFromLabRows = (rows: any[]): LabResultRow | null => {
-  if (!rows || rows.length === 0) return null;
-
-  const getValue = (param: string, defaultValue: any = 0) => {
-    const row = rows.find(r => r.parameter === param);
-    if (!row) return defaultValue;
-    
-    // Handle boolean values (stored as '1' or '0')
-    if (param === 'heavy_metals' || param === 'e_coli_present') {
-      return row.value === '1';
-    }
-    
-    // Handle numeric values
-    const num = parseFloat(row.value);
-    return isNaN(num) ? defaultValue : num;
   };
-
-  const overallRow = rows.find(r => r.parameter === 'overall_safety');
   
-  return {
-    id: rows[0].id || '',
-    report_id: rows[0].report_id,
-    bacteria_count: getValue('bacteria_count', 0),
-    ph_level: getValue('ph_level', 7.0),
-    turbidity: getValue('turbidity', 0),
-    chlorine: getValue('chlorine', 0.2),
-    heavy_metals: getValue('heavy_metals', false),
-    e_coli_present: getValue('e_coli_present', false),
-    total_dissolved_solids: getValue('total_dissolved_solids', 150),
-    test_date: overallRow?.tested_at || rows[0].tested_at,
-    technician_notes: overallRow?.notes || '',
-    safety_level: overallRow?.value as 'safe' | 'warning' | 'danger' || 'safe',
-    technician_id: rows[0].lab_officer,
-    created_at: rows[0].tested_at
-  };
+  return texts[type]?.[condition] || condition;
 };
 
 export default function AnalisisLabPage() {
@@ -256,6 +197,7 @@ export default function AnalisisLabPage() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   const [formData, setFormData] = useState<LabTestForm>({
     report_id: '',
@@ -269,141 +211,157 @@ export default function AnalisisLabPage() {
     technician_notes: ''
   });
 
+  // 🔍 DEBUG: Log auth state
   useEffect(() => {
+    console.log('🔄 Auth state di AnalisisLab:', {
+      userEmail: user?.email,
+      profileRole: profile?.role,
+      profileKecamatan: profile?.kecamatan,
+      profileNama: profile?.nama
+    });
+  }, [user, profile]);
+
+  // 🚀 Fetch data when user is authenticated
+  useEffect(() => {
+    console.log('🔄 useEffect triggered, profile role:', profile?.role);
+    
     if (user && profile?.role === 'puskesmas') {
+      console.log('✅ User is puskesmas, fetching data...');
       fetchWaterReports();
     } else if (user && profile?.role !== 'puskesmas') {
+      console.log('❌ User bukan puskesmas, role:', profile?.role);
       toast.error('Hanya untuk puskesmas');
       router.push('/dashboard');
+    } else {
+      console.log('⏳ Waiting for auth...');
     }
   }, [user, profile, router]);
 
-const fetchWaterReports = async () => {
-  try {
-    setLoading(true);
-    
-    if (!profile) {
-      console.error('❌ Profile tidak ditemukan');
-      toast.error('Profile pengguna tidak ditemukan');
-      return;
-    }
-
-    if (!profile.kecamatan) {
-      console.error('❌ Kecamatan tidak ditemukan di profile');
-      toast.error('Data kecamatan tidak ditemukan');
-      return;
-    }
-
-    console.log('🔍 Fetching reports for kecamatan:', profile.kecamatan);
-    
-    // 1. Ambil data reports berdasarkan kecamatan
-    const { data: reportsData, error: reportsError } = await supabase
-      .from('reports')
-      .select('*')
-      .eq('kecamatan', profile.kecamatan)
-      .order('created_at', { ascending: false });
-
-    if (reportsError) {
-      console.error('❌ Reports fetch error:', reportsError);
-      throw new Error(`Gagal mengambil data laporan: ${reportsError.message}`);
-    }
-
-    console.log('📊 Raw reports data:', reportsData?.length || 0);
-
-    if (!reportsData || reportsData.length === 0) {
-      console.log('📭 No reports found for kecamatan:', profile.kecamatan);
-      setReports([]);
-      console.info(`Belum ada laporan di kecamatan ${profile.kecamatan}`);
-      return;
-    }
-
-    // 2. Collect unique report IDs and user IDs
-    const reportIds = reportsData.map((r: any) => r.id).filter(Boolean);
-    const userIds = [...new Set(reportsData.map((r: any) => r.user_id).filter(Boolean))];
-    
-    console.log('📋 Report IDs:', reportIds.length);
-    console.log('👥 Unique user IDs:', userIds.length);
-
-    // 3. Batch fetch lab_results (MULTIPLE ROWS per report)
-    let labResultsMap: Record<string, LabResultRow | null> = {};
-    
-    if (reportIds.length > 0) {
-      const { data: labResultsData, error: labError } = await supabase
-        .from('lab_results')
-        .select('*')
-        .in('report_id', reportIds)
-        .order('tested_at', { ascending: false });
-
-      if (labError) {
-        console.error('⚠️ Lab results fetch error (non-critical):', labError);
-      } else if (labResultsData && labResultsData.length > 0) {
-        console.log('🔬 Total lab result rows:', labResultsData.length);
-        
-        // Group lab results by report_id (CRITICAL FIX)
-        const labsByReport = new Map<string, any[]>();
-        
-        labResultsData.forEach(lab => {
-          const existing = labsByReport.get(lab.report_id) || [];
-          existing.push(lab);
-          labsByReport.set(lab.report_id, existing);
-        });
-        
-        console.log('📦 Lab results grouped by report:', labsByReport.size, 'reports have tests');
-        
-        // Transform each group of rows to single LabResultRow object
-        labsByReport.forEach((rows, reportId) => {
-          const transformed = transformFromLabRows(rows);
-          if (transformed) {
-            labResultsMap[reportId] = transformed;
-          }
-        });
-        
-        console.log('✅ Transformed lab results:', Object.keys(labResultsMap).length);
-      } else {
-        console.log('📭 No lab results found');
+  // 📥 FETCH WATER REPORTS - MIRIP DENGAN DASHBOARD
+  const fetchWaterReports = async () => {
+    try {
+      setLoading(true);
+      setIsRefreshing(true);
+      console.log('🚀 Starting fetchWaterReports...');
+      
+      // Check if profile has kecamatan
+      if (!profile?.kecamatan) {
+        console.error('❌ Kecamatan not found in profile');
+        toast.error('Data kecamatan tidak ditemukan di profile');
+        return;
       }
-    }
 
-    // 4. Batch fetch users data
-    let usersMap: Record<string, UserRow> = {};
-    
-    if (userIds.length > 0) {
-      const { data: usersData, error: usersError } = await supabase
+      const kecamatan = profile.kecamatan;
+      console.log('📍 Fetching reports for kecamatan:', kecamatan);
+      
+      // 1️⃣ Dapatkan warga di wilayah puskesmas (SAMA DENGAN DASHBOARD)
+      const { data: wargaData } = await supabase
         .from('users')
         .select('id, nama, phone, email')
-        .in('id', userIds);
+        .eq('kecamatan', kecamatan)
+        .eq('role', 'warga');
 
-      if (usersError) {
-        console.error('⚠️ Users fetch error (non-critical):', usersError);
-      } else if (usersData) {
-        usersMap = usersData.reduce((map: Record<string, UserRow>, user: any) => {
-          map[user.id] = {
-            id: user.id,
-            nama: user.nama || 'Tidak diketahui',
-            phone: user.phone || '-',
-            email: user.email || ''
-          };
-          return map;
-        }, {});
-        
-        console.log('👤 Users loaded:', Object.keys(usersMap).length);
-      }
-    }
+      const wargaIds = wargaData?.map(w => w.id) || [];
+      const wargaMap = new Map(wargaData?.map(w => [w.id, w]) || []);
 
-    // 5. Merge all data together
-    const processedReports: WaterReport[] = reportsData.map((report: any) => {
-      // Get user data with fallback
-      const userData = usersMap[report.user_id] || { 
-        id: report.user_id, 
-        nama: 'Tidak diketahui', 
-        phone: '-', 
-        email: '' 
-      };
-
-      // Get lab result (already transformed from multiple rows)
-      const labResult = labResultsMap[report.id] || undefined;
+      console.log('👥 Warga di kecamatan:', wargaIds.length);
       
-      return {
+      if (wargaIds.length === 0) {
+        console.log('📭 No residents in this kecamatan');
+        setReports([]);
+        setSelectedReport(null);
+        toast.success(`Belum ada warga terdaftar di kecamatan ${kecamatan}`);
+        return;
+      }
+
+      // 2️⃣ Ambil laporan dari warga tersebut (SAMA DENGAN DASHBOARD)
+      const { data: reportsData, error: reportsError } = await supabase
+        .from('reports')
+        .select('*')
+        .in('user_id', wargaIds)
+        .order('created_at', { ascending: false });
+
+      if (reportsError) {
+        console.error('❌ Reports fetch error:', reportsError);
+        throw new Error(`Gagal mengambil data laporan: ${reportsError.message}`);
+      }
+
+      console.log('📊 Total reports found:', reportsData?.length || 0);
+
+      if (!reportsData || reportsData.length === 0) {
+        console.log('📭 No reports found in this kecamatan');
+        setReports([]);
+        setSelectedReport(null);
+        toast.success(`Belum ada laporan di kecamatan ${kecamatan}`);
+        return;
+      }
+
+      // Log first report for debugging
+      if (reportsData.length > 0) {
+        console.log('📋 Sample report:', {
+          id: reportsData[0].id,
+          status: reportsData[0].status,
+          kecamatan: reportsData[0].kecamatan,
+          lokasi: reportsData[0].lokasi
+        });
+      }
+
+      // 3️⃣ Ambil lab results untuk reports ini (SAMA DENGAN DASHBOARD)
+      const reportIds = reportsData.map(r => r.id);
+      let labResultsMap = new Map();
+      
+      if (reportIds.length > 0) {
+        const { data: labResultsData, error: labError } = await supabase
+          .from('lab_results')
+          .select('*')
+          .in('report_id', reportIds);
+
+        if (!labError && labResultsData && labResultsData.length > 0) {
+          console.log('🔬 Total lab result rows:', labResultsData.length);
+          
+          // Group by report_id dan transform ke structured format
+          const groupedByReport = new Map<string, any[]>();
+          labResultsData.forEach(lab => {
+            if (lab.report_id) {
+              const existing = groupedByReport.get(lab.report_id) || [];
+              existing.push(lab);
+              groupedByReport.set(lab.report_id, existing);
+            }
+          });
+
+          // Convert grouped data to structured lab result
+          groupedByReport.forEach((rows, reportId) => {
+            try {
+              const overallRow = rows.find(r => r.parameter === 'overall_safety');
+              if (overallRow) {
+                labResultsMap.set(reportId, {
+                  report_id: reportId,
+                  bacteria_count: parseFloat(rows.find(r => r.parameter === 'bacteria_count')?.value || '0'),
+                  ph_level: parseFloat(rows.find(r => r.parameter === 'ph_level')?.value || '7.0'),
+                  turbidity: parseFloat(rows.find(r => r.parameter === 'turbidity')?.value || '0'),
+                  chlorine: parseFloat(rows.find(r => r.parameter === 'chlorine')?.value || '0.2'),
+                  heavy_metals: rows.find(r => r.parameter === 'heavy_metals')?.value === '1',
+                  e_coli_present: rows.find(r => r.parameter === 'e_coli_present')?.value === '1',
+                  total_dissolved_solids: parseFloat(rows.find(r => r.parameter === 'total_dissolved_solids')?.value || '150'),
+                  test_date: overallRow.tested_at,
+                  technician_notes: overallRow.notes || '',
+                  safety_level: overallRow.status === 'aman' ? 'safe' : 
+                               overallRow.status === 'warning' ? 'warning' : 'danger'
+                });
+              }
+            } catch (error) {
+              console.warn(`⚠️ Error processing lab result for report ${reportId}:`, error);
+            }
+          });
+
+          console.log('✅ Lab results processed:', labResultsMap.size);
+        } else {
+          console.log('📭 No lab results found or error:', labError?.message);
+        }
+      }
+
+      // 4️⃣ Gabungkan data (SAMA DENGAN DASHBOARD)
+      const processedReports: WaterReport[] = reportsData.map(report => ({
         id: report.id,
         user_id: report.user_id,
         lokasi: report.lokasi || '',
@@ -416,65 +374,72 @@ const fetchWaterReports = async () => {
         kecamatan: report.kecamatan || '',
         created_at: report.created_at,
         updated_at: report.updated_at || report.created_at,
-        user: userData,
-        lab_result: labResult
-      };
-    });
+        users: wargaMap.get(report.user_id),
+        lab_result: labResultsMap.get(report.id)
+      }));
 
-    console.log('✅ Processed reports:', processedReports.length);
-    console.log('🔬 Reports with lab results:', processedReports.filter(r => r.lab_result).length);
-    
-    setReports(processedReports);
-    
-    // Auto-select first pending report if none selected
-    if (processedReports.length > 0 && !selectedReport) {
+      console.log('✅ Final processed reports:', processedReports.length);
+      console.log('📈 Status breakdown:', {
+        pending: processedReports.filter(r => r.status === 'pending').length,
+        diproses: processedReports.filter(r => r.status === 'diproses').length,
+        selesai: processedReports.filter(r => r.status === 'selesai').length,
+        ditolak: processedReports.filter(r => r.status === 'ditolak').length
+      });
+
+      setReports(processedReports);
+
+      // Auto-select first pending report, or first report
       const firstPending = processedReports.find(r => r.status === 'pending');
-      const reportToSelect = firstPending || processedReports[0];
-      setSelectedReport(reportToSelect);
-      console.log('📌 Auto-selected report:', reportToSelect.id);
-    }
+      const firstReport = processedReports[0];
+      
+      if (firstPending) {
+        setSelectedReport(firstPending);
+        console.log('📌 Auto-selected pending report:', firstPending.id);
+      } else if (firstReport) {
+        setSelectedReport(firstReport);
+        console.log('📌 Auto-selected first report:', firstReport.id);
+      } else {
+        setSelectedReport(null);
+      }
 
-  } catch (error: any) {
-    console.error('❌ Error fetching reports:', error);
-    
-    // Specific error handling
-    if (error.message?.includes('JWT')) {
-      toast.error('Sesi login expired, silahkan login ulang');
-      router.push('/login');
-    } else if (error.message?.includes('network')) {
-      toast.error('Gagal terhubung ke server. Cek koneksi internet Anda');
-    } else {
-      toast.error(`Gagal mengambil data laporan: ${error.message || 'Unknown error'}`);
+    } catch (error: any) {
+      console.error('❌ Error in fetchWaterReports:', error);
+      toast.error(`Gagal mengambil data: ${error.message || 'Unknown error'}`);
+      setReports([]);
+      setSelectedReport(null);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
     }
-    
-    setReports([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
+  // 📝 Load form data when report is selected
   useEffect(() => {
     if (selectedReport) {
+      console.log('📝 Loading form data for report:', selectedReport.id);
+      
       setFormData(prev => ({
         ...prev,
         report_id: selectedReport.id
       }));
-      
+
       // Load existing lab results if any
       if (selectedReport.lab_result) {
+        console.log('🔄 Loading existing lab results');
         setFormData({
           report_id: selectedReport.id,
-          bacteria_count: getSafeValue(selectedReport.lab_result.bacteria_count, 0),
-          ph_level: getSafeValue(selectedReport.lab_result.ph_level, 7.0),
-          turbidity: getSafeValue(selectedReport.lab_result.turbidity, 0),
-          chlorine: getSafeValue(selectedReport.lab_result.chlorine, 0.2),
-          heavy_metals: getSafeValue(selectedReport.lab_result.heavy_metals, false),
-          e_coli_present: getSafeValue(selectedReport.lab_result.e_coli_present, false),
-          total_dissolved_solids: getSafeValue(selectedReport.lab_result.total_dissolved_solids, 150),
-          technician_notes: getSafeValue(selectedReport.lab_result.technician_notes, '')
+          bacteria_count: selectedReport.lab_result.bacteria_count || 0,
+          ph_level: selectedReport.lab_result.ph_level || 7.0,
+          turbidity: selectedReport.lab_result.turbidity || 0,
+          chlorine: selectedReport.lab_result.chlorine || 0.2,
+          heavy_metals: selectedReport.lab_result.heavy_metals || false,
+          e_coli_present: selectedReport.lab_result.e_coli_present || false,
+          total_dissolved_solids: selectedReport.lab_result.total_dissolved_solids || 150,
+          technician_notes: selectedReport.lab_result.technician_notes || ''
         });
       } else {
-        // Reset form untuk report baru
+        // Reset form for new analysis
+        console.log('🔄 Resetting form for new analysis');
         setFormData({
           report_id: selectedReport.id,
           bacteria_count: 0,
@@ -490,328 +455,280 @@ const fetchWaterReports = async () => {
     }
   }, [selectedReport]);
 
-  const sendNotificationToUser = async (userId: string, safetyLevel: 'safe' | 'warning' | 'danger', reportLocation: string) => {
-  try {
-    const notificationTitles = {
-      safe: '✅ Hasil Analisis: Air AMAN',
-      warning: '⚠️ Hasil Analisis: Air WASPADA',
-      danger: '🚨 Hasil Analisis: Air BAHAYA'
-    };
-
-    const notificationMessages = {
-      safe: `Hasil analisis laboratorium untuk laporan air di ${reportLocation} menunjukkan kondisi AMAN untuk dikonsumsi. Namun tetap jaga kebersihan sumber air Anda.`,
-      warning: `Hasil analisis laboratorium untuk laporan air di ${reportLocation} menunjukkan kondisi WASPADA. Beberapa parameter tidak memenuhi standar. Harap berhati-hati dan pertimbangkan pengolahan tambahan.`,
-      danger: `Hasil analisis laboratorium untuk laporan air di ${reportLocation} menunjukkan kondisi BAHAYA! Air tidak aman untuk dikonsumsi. Segera hentikan penggunaan dan hubungi puskesmas untuk penanganan lebih lanjut.`
-    };
-
-    const notificationTypes: { [key: string]: 'info' | 'warning' | 'urgent' | 'lab_result' } = {
-      safe: 'lab_result',
-      warning: 'warning',
-      danger: 'urgent'
-    };
-
-    const notificationData = {
-      user_id: userId,
-      puskesmas_id: user!.id,
-      title: notificationTitles[safetyLevel],
-      message: notificationMessages[safetyLevel],
-      type: notificationTypes[safetyLevel],
-      is_read: false
-    };
-
-    console.log('📧 Sending notification to user:', notificationData);
-
-    const { error: notifError } = await supabase
-      .from('notifications')
-      .insert([notificationData]);
-
-    if (notifError) {
-      console.error('❌ Notification error:', notifError);
-      return false;
-    }
-
-    console.log('✅ Notification sent successfully');
-    return true;
-  } catch (error) {
-    console.error('Error sending notification:', error);
-    return false;
-  }
-};
-
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  if (!selectedReport || !user) {
-    toast.error('Pilih laporan terlebih dahulu');
-    return;
-  }
-
-  // Validasi form data
-  if (isNaN(formData.ph_level) || formData.ph_level < 0 || formData.ph_level > 14) {
-    toast.error('Nilai pH harus antara 0-14');
-    return;
-  }
-
-  const loadingToast = toast.loading('Menyimpan hasil analisis...');
-
-  try {
-    setSaving(true);
-
-    // Analyze water safety
-    const safetyAnalysis = analyzeWaterSafety({
-      bacteria_count: formData.bacteria_count || 0,
-      ph_level: formData.ph_level || 7.0,
-      turbidity: formData.turbidity || 0,
-      chlorine: formData.chlorine || 0.2,
-      heavy_metals: formData.heavy_metals || false,
-      e_coli_present: formData.e_coli_present || false,
-      total_dissolved_solids: formData.total_dissolved_solids || 150
-    });
-
-    console.log('🔬 Safety Analysis:', safetyAnalysis);
-
-    // 1. Transform to key-value rows for database
-const labRows = [
-      {
-        report_id: selectedReport.id,
-        parameter: 'bacteria_count',
-        value: String(formData.bacteria_count || 0),
-        unit: 'CFU/mL',
-        status: formData.bacteria_count > 1000 ? 'danger' : formData.bacteria_count > 100 ? 'warning' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'ph_level',
-        value: String(formData.ph_level || 7.0),
-        unit: 'pH',
-        status: (formData.ph_level < 6.5 || formData.ph_level > 8.5) ? 'warning' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'turbidity',
-        value: String(formData.turbidity || 0),
-        unit: 'NTU',
-        status: formData.turbidity > 5 ? 'warning' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'chlorine',
-        value: String(formData.chlorine || 0.2),
-        unit: 'mg/L',
-        status: (formData.chlorine < 0.2 || formData.chlorine > 0.5) ? 'warning' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'total_dissolved_solids',
-        value: String(formData.total_dissolved_solids || 150),
-        unit: 'mg/L',
-        status: formData.total_dissolved_solids > 500 ? 'warning' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'heavy_metals',
-        value: formData.heavy_metals ? '1' : '0',
-        unit: 'boolean',
-        status: formData.heavy_metals ? 'danger' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'e_coli_present',
-        value: formData.e_coli_present ? '1' : '0',
-        unit: 'boolean',
-        status: formData.e_coli_present ? 'danger' : 'safe',
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: '',
-        puskesmas_id: profile?.id || user.id
-      },
-      {
-        report_id: selectedReport.id,
-        parameter: 'overall_safety',
-        value: safetyAnalysis.safety_level,
-        unit: 'assessment',
-        status: safetyAnalysis.safety_level,
-        tested_at: new Date().toISOString(),
-        lab_officer: user.id,
-        notes: formData.technician_notes || '',
-        puskesmas_id: profile?.id || user.id
-      }
-    ];
-
-    console.log('💾 Saving', labRows.length, 'lab result rows');
-
-    // 2. Delete existing lab results first
-    const { error: deleteError } = await supabase
-      .from('lab_results')
-      .delete()
-      .eq('report_id', selectedReport.id);
-
-    if (deleteError) {
-      console.warn('⚠️ Could not delete existing lab results:', deleteError);
-    }
-
-    // 3. Insert new lab results (MULTIPLE ROWS)
-    toast.loading('Menyimpan hasil laboratorium...', { id: loadingToast });
+  // ✅ HANDLE SUBMIT - SIMPLIFIED VERSION
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    const { data: labResult, error: labError } = await supabase
-      .from('lab_results')
-      .insert(labRows)
-      .select();
-
-    if (labError) {
-      console.error('❌ Lab save error:', labError);
-      throw new Error(`Gagal menyimpan hasil lab: ${labError.message}`);
+    if (!selectedReport || !user || !profile) {
+      toast.error('Data tidak lengkap. Silakan pilih laporan.');
+      return;
     }
 
-    console.log('✅ Lab results saved:', labResult?.length, 'rows');
+    console.log('🚀 Submitting lab analysis for report:', selectedReport.id);
 
-    // 4. Update report status to 'selesai'
-    toast.loading('Memperbarui status laporan...', { id: loadingToast });
-    
-    const { error: reportError } = await supabase
-      .from('reports')
-      .update({ 
-        status: 'selesai',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', selectedReport.id);
-
-    if (reportError) {
-      console.error('❌ Report update error:', reportError);
-      throw new Error(`Status laporan gagal diupdate: ${reportError.message}`);
+    // Validate form
+    if (isNaN(formData.ph_level) || formData.ph_level < 0 || formData.ph_level > 14) {
+      toast.error('Nilai pH harus antara 0-14');
+      return;
     }
 
-    console.log('✅ Report status updated to "selesai"');
+    if (isNaN(formData.bacteria_count) || formData.bacteria_count < 0) {
+      toast.error('Jumlah bakteri harus angka positif');
+      return;
+    }
 
-    // 5. Send notification to user
-    toast.loading('Mengirim notifikasi ke warga...', { id: loadingToast });
-    
+    const loadingToast = toast.loading('Menyimpan hasil analisis...');
+
     try {
-      const notificationTitles = {
-        safe: '✅ Hasil Analisis: Air AMAN',
-        warning: '⚠️ Hasil Analisis: Air WASPADA',
-        danger: '🚨 Hasil Analisis: Air BAHAYA'
-      };
+      setSaving(true);
 
-      const notificationMessages = {
-        safe: `Hasil analisis laboratorium untuk laporan air di ${selectedReport.lokasi} menunjukkan kondisi AMAN untuk dikonsumsi. Namun tetap jaga kebersihan sumber air Anda.`,
-        warning: `Hasil analisis laboratorium untuk laporan air di ${selectedReport.lokasi} menunjukkan kondisi WASPADA. Beberapa parameter tidak memenuhi standar. Harap berhati-hati dan pertimbangkan pengolahan tambahan.`,
-        danger: `Hasil analisis laboratorium untuk laporan air di ${selectedReport.lokasi} menunjukkan kondisi BAHAYA! Air tidak aman untuk dikonsumsi. Segera hentikan penggunaan dan hubungi puskesmas untuk penanganan lebih lanjut.`
-      };
+      // Analyze water safety
+      const safetyAnalysis = analyzeWaterSafety({
+        bacteria_count: formData.bacteria_count,
+        ph_level: formData.ph_level,
+        turbidity: formData.turbidity,
+        chlorine: formData.chlorine,
+        heavy_metals: formData.heavy_metals,
+        e_coli_present: formData.e_coli_present,
+        total_dissolved_solids: formData.total_dissolved_solids
+      });
 
-      const notificationData = {
-        user_id: selectedReport.user_id,
-        puskesmas_id: user.id,
-        title: notificationTitles[safetyAnalysis.safety_level],
-        message: notificationMessages[safetyAnalysis.safety_level],
-        type: safetyAnalysis.safety_level === 'safe' ? 'info' : safetyAnalysis.safety_level === 'warning' ? 'warning' : 'urgent',
-        is_read: false,
-        created_at: new Date().toISOString()
-      };
+      console.log('🔬 Safety analysis result:', safetyAnalysis);
 
-      const { error: notifError } = await supabase
-        .from('notifications')
-        .insert([notificationData]);
+      const currentTimestamp = new Date().toISOString();
+      const safetyStatus = safetyAnalysis.safety_level === 'safe' ? 'aman' : 
+                          safetyAnalysis.safety_level === 'warning' ? 'warning' : 'bahaya';
 
-      if (notifError) {
+      // 🧪 Prepare lab data rows (KEY-VALUE format)
+      const labRows = [
+        {
+          report_id: selectedReport.id,
+          parameter: 'bacteria_count',
+          value: String(formData.bacteria_count),
+          unit: 'CFU/mL',
+          status: formData.bacteria_count > 1000 ? 'bahaya' : formData.bacteria_count > 100 ? 'warning' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'ph_level',
+          value: String(formData.ph_level.toFixed(1)),
+          unit: 'pH',
+          status: (formData.ph_level < 6.5 || formData.ph_level > 8.5) ? 'warning' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'turbidity',
+          value: String(formData.turbidity.toFixed(1)),
+          unit: 'NTU',
+          status: formData.turbidity > 5 ? 'warning' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'chlorine',
+          value: String(formData.chlorine.toFixed(2)),
+          unit: 'mg/L',
+          status: (formData.chlorine < 0.2 || formData.chlorine > 0.5) ? 'warning' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'total_dissolved_solids',
+          value: String(formData.total_dissolved_solids),
+          unit: 'mg/L',
+          status: formData.total_dissolved_solids > 500 ? 'warning' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'heavy_metals',
+          value: formData.heavy_metals ? '1' : '0',
+          unit: 'boolean',
+          status: formData.heavy_metals ? 'bahaya' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'e_coli_present',
+          value: formData.e_coli_present ? '1' : '0',
+          unit: 'boolean',
+          status: formData.e_coli_present ? 'bahaya' : 'aman',
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: '',
+          puskesmas_id: profile.id
+        },
+        {
+          report_id: selectedReport.id,
+          parameter: 'overall_safety',
+          value: String(safetyAnalysis.score),
+          unit: 'score',
+          status: safetyStatus,
+          tested_at: currentTimestamp,
+          lab_officer: user.id,
+          notes: formData.technician_notes || '',
+          puskesmas_id: profile.id
+        }
+      ];
+
+      console.log('💾 Saving lab rows:', labRows.length);
+
+      // 1️⃣ Delete existing lab results first
+      const { error: deleteError } = await supabase
+        .from('lab_results')
+        .delete()
+        .eq('report_id', selectedReport.id);
+
+      if (deleteError) {
+        console.warn('⚠️ Could not delete existing lab results:', deleteError.message);
+      }
+
+      // 2️⃣ Insert new lab results
+      toast.loading('Menyimpan hasil laboratorium...', { id: loadingToast });
+      
+      const { error: labError } = await supabase
+        .from('lab_results')
+        .insert(labRows);
+
+      if (labError) {
+        console.error('❌ Lab save error:', labError);
+        throw new Error(`Gagal menyimpan hasil lab: ${labError.message}`);
+      }
+
+      console.log('✅ Lab results saved');
+
+      // 3️⃣ Update report status to 'selesai'
+      toast.loading('Memperbarui status laporan...', { id: loadingToast });
+      
+      const { error: reportError } = await supabase
+        .from('reports')
+        .update({ 
+          status: 'selesai',
+          updated_at: currentTimestamp
+        })
+        .eq('id', selectedReport.id);
+
+      if (reportError) {
+        console.error('❌ Report update error:', reportError);
+        // Continue anyway, lab results are saved
+      } else {
+        console.log('✅ Report status updated to "selesai"');
+      }
+
+      // 4️⃣ Send notification to user
+      toast.loading('Mengirim notifikasi ke warga...', { id: loadingToast });
+      
+      try {
+        const notificationMessages = {
+          safe: `✅ Hasil Analisis: Air AMAN\nAir di ${selectedReport.lokasi} AMAN untuk dikonsumsi. Tetap jaga kebersihan sumber air.`,
+          warning: `⚠️ Hasil Analisis: Air WASPADA\nAir di ${selectedReport.lokasi} dalam kondisi WASPADA. Beberapa parameter tidak memenuhi standar.`,
+          danger: `🚨 Hasil Analisis: Air BAHAYA\nAir di ${selectedReport.lokasi} BERBAHAYA! Tidak aman untuk dikonsumsi.`
+        };
+
+        const notificationData = {
+          user_id: selectedReport.user_id,
+          puskesmas_id: user.id,
+          title: safetyAnalysis.safety_level === 'safe' ? '✅ Air AMAN' : 
+                 safetyAnalysis.safety_level === 'warning' ? '⚠️ Air WASPADA' : '🚨 Air BAHAYA',
+          message: notificationMessages[safetyAnalysis.safety_level],
+          type: safetyAnalysis.safety_level === 'safe' ? 'info' : 
+                safetyAnalysis.safety_level === 'warning' ? 'warning' : 'urgent',
+          is_read: false,
+          created_at: currentTimestamp
+        };
+
+        const { error: notifError } = await supabase
+          .from('notifications')
+          .insert([notificationData]);
+
+        if (notifError) {
+          console.warn('⚠️ Notification error:', notifError.message);
+        } else {
+          console.log('✅ Notification sent');
+        }
+      } catch (notifError) {
         console.warn('⚠️ Notification failed:', notifError);
       }
 
-    } catch (notifError) {
-      console.warn('⚠️ Notification error:', notifError);
-    }
+      // 5️⃣ Success message
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Analisis Berhasil Disimpan!</div>
+          <div className="text-sm mt-1">
+            • Hasil lab tersimpan ✓<br/>
+            • Status laporan: SELESAI ✓<br/>
+            • Notifikasi terkirim ke warga ✓
+          </div>
+        </div>,
+        { id: loadingToast, duration: 5000 }
+      );
 
-    // 6. Success message
-    toast.success(
-      <div>
-        <div className="font-bold">✅ Analisis Berhasil Disimpan!</div>
-        <div className="text-sm mt-1">
-          • {labResult?.length || 8} parameter tersimpan ✓<br/>
-          • Status laporan diperbarui ✓<br/>
-          • Notifikasi terkirim ke warga ✓
-        </div>
-      </div>,
-      { 
-        id: loadingToast, 
-        duration: 5000
+      // 6️⃣ Refresh data and select next report
+      await fetchWaterReports();
+      
+      // Find next pending report
+      const nextReport = reports.find(r => 
+        r.id !== selectedReport.id && 
+        (r.status === 'pending' || r.status === 'diproses')
+      );
+      
+      if (nextReport) {
+        setSelectedReport(nextReport);
+        toast.success(`Beralih ke laporan berikutnya`, { duration: 3000 });
       }
-    );
 
-    // 7. Refresh data
-    await fetchWaterReports();
-    
-    // 8. Select next pending report
-    const nextReport = reports.find(r => 
-      r.id !== selectedReport.id && 
-      r.status === 'pending'
-    );
-    
-    if (nextReport) {
-      setSelectedReport(nextReport);
+    } catch (error: any) {
+      console.error('❌ Submit error:', error);
+      toast.error(
+        <div>
+          <div className="font-bold">❌ Gagal Menyimpan</div>
+          <div className="text-sm">{error.message}</div>
+        </div>,
+        { id: loadingToast, duration: 5000 }
+      );
+    } finally {
+      setSaving(false);
     }
+  };
 
-  } catch (error: any) {
-    console.error('❌ Error in handleSubmit:', error);
-    
-    toast.error(
-      <div>
-        <div className="font-bold">❌ Gagal Menyimpan Analisis</div>
-        <div className="text-sm mt-1">{error.message || 'Terjadi kesalahan'}</div>
-      </div>,
-      { 
-        id: loadingToast, 
-        duration: 8000 
-      }
-    );
-  } finally {
-    setSaving(false);
-  }
-};
-
-  const filteredReports = reports.filter(report => {
-    const matchesSearch = 
-      (report.user?.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (report.lokasi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (report.keterangan || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesFilter = 
-      statusFilter === 'all' || 
-      report.status === statusFilter;
-    
-    return matchesSearch && matchesFilter;
-  });
-
+  // 🎨 UI Helper Functions
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'diproses': return 'bg-blue-100 text-blue-800';
-      case 'selesai': return 'bg-green-100 text-green-800';
-      case 'ditolak': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'diproses': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'selesai': return 'bg-green-100 text-green-800 border-green-200';
+      case 'ditolak': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'diproses': return <Activity className="w-4 h-4" />;
+      case 'selesai': return <CheckCircle className="w-4 h-4" />;
+      case 'ditolak': return <XCircle className="w-4 h-4" />;
+      default: return <Clock className="w-4 h-4" />;
     }
   };
 
@@ -843,26 +760,56 @@ const labRows = [
     }
   };
 
-  // Analyze current form data dengan nilai yang aman
-  const currentAnalysis = analyzeWaterSafety({
-    bacteria_count: getSafeValue(formData.bacteria_count, 0),
-    ph_level: getSafeValue(formData.ph_level, 7.0),
-    turbidity: getSafeValue(formData.turbidity, 0),
-    chlorine: getSafeValue(formData.chlorine, 0.2),
-    heavy_metals: getSafeValue(formData.heavy_metals, false),
-    e_coli_present: getSafeValue(formData.e_coli_present, false),
-    total_dissolved_solids: getSafeValue(formData.total_dissolved_solids, 150)
+  const getSafetyIcon = (level: 'safe' | 'warning' | 'danger') => {
+    switch (level) {
+      case 'safe': return <CheckCircle className="w-4 h-4" />;
+      case 'warning':
+      case 'danger': return <AlertTriangle className="w-4 h-4" />;
+      default: return null;
+    }
+  };
+
+  // Filter reports
+  const filteredReports = reports.filter(report => {
+    const matchesSearch = 
+      (report.users?.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (report.lokasi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (report.keterangan || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesFilter = 
+      statusFilter === 'all' || 
+      report.status === statusFilter;
+    
+    return matchesSearch && matchesFilter;
   });
 
-  // Loading state
-  if (loading) {
+  // Analyze current form data
+  const currentAnalysis = analyzeWaterSafety({
+    bacteria_count: formData.bacteria_count,
+    ph_level: formData.ph_level,
+    turbidity: formData.turbidity,
+    chlorine: formData.chlorine,
+    heavy_metals: formData.heavy_metals,
+    e_coli_present: formData.e_coli_present,
+    total_dissolved_solids: formData.total_dissolved_solids
+  });
+
+  // Handle refresh
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchWaterReports();
+  };
+
+  // 🏗️ Loading State
+  if (loading && !isRefreshing) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Memuat data laporan...</p>
-          <p className="text-sm text-gray-500 mt-2">Puskesmas: {profile?.nama || profile?.kecamatan || 'Loading...'}</p>
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
+          <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
         </div>
+        <h2 className="text-xl font-bold text-blue-700">Air Bersih</h2>
+        <p className="text-sm text-gray-600">Memuat data laporan...</p>
       </div>
     );
   }
@@ -871,25 +818,24 @@ const labRows = [
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 md:p-6">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Beaker className="w-8 h-8 text-blue-600" />
               Laboratorium Analisis Air
             </h1>
             <p className="text-gray-600 mt-2">
-              Puskesmas: {getSafeValue(profile?.nama) || getSafeValue(profile?.kecamatan) || 'Tidak diketahui'}
-              {profile?.kecamatan && (
-                <span className="ml-2 text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                  Kecamatan: {profile.kecamatan}
-                </span>
-              )}
+              Puskesmas: <span className="font-semibold">{profile?.nama || profile?.kecamatan || 'Tidak diketahui'}</span>
+              <span className="ml-2 text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                Kecamatan: {profile?.kecamatan || 'Tidak diketahui'}
+              </span>
             </p>
             <p className="text-sm text-gray-500">
               Total Laporan: {reports.length} | Ditampilkan: {filteredReports.length}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          
+          <div className="flex flex-wrap gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -900,11 +846,14 @@ const labRows = [
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
               />
             </div>
+            
             <button
-              onClick={fetchWaterReports}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              Refresh
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Memperbarui...' : 'Refresh'}
             </button>
           </div>
         </div>
@@ -917,14 +866,16 @@ const labRows = [
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Daftar Laporan ({filteredReports.length})
+                Daftar Laporan
+                <span className="text-sm font-normal text-gray-500">({filteredReports.length})</span>
               </h2>
+              
               <div className="relative">
                 <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
                 >
                   <option value="all">Semua Status</option>
                   <option value="pending">Menunggu</option>
@@ -935,61 +886,90 @@ const labRows = [
               </div>
             </div>
 
-            {filteredReports.length === 0 ? (
+            {isRefreshing ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="text-gray-600 mt-2">Memperbarui data...</p>
+              </div>
+            ) : filteredReports.length === 0 ? (
               <div className="text-center py-12">
                 <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500">Tidak ada laporan ditemukan</p>
                 <p className="text-sm text-gray-400 mt-2">
-                  {profile?.kecamatan 
-                    ? `Belum ada laporan di kecamatan ${profile.kecamatan}` 
-                    : 'Belum ada laporan'}
+                  {reports.length === 0 
+                    ? `Belum ada laporan di kecamatan ${profile?.kecamatan || 'ini'}`
+                    : 'Coba ubah filter atau pencarian'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                 {filteredReports.map(report => (
                   <div
                     key={report.id}
                     onClick={() => setSelectedReport(report)}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md ${
+                    className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:shadow-md ${
                       selectedReport?.id === report.id
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-blue-500 bg-blue-50 shadow-md'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
-                          <User className="w-4 h-4 text-gray-500" />
-                          <span className="font-semibold text-gray-800">
-                            {getSafeValue(report.user?.nama, 'Tidak diketahui')}
+                          <User className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                          <span className="font-semibold text-gray-800 truncate">
+                            {report.users?.nama || 'Tidak diketahui'}
                           </span>
                         </div>
+                        
                         <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                          <MapPin className="w-4 h-4" />
-                          <span className="truncate">{getSafeValue(report.lokasi, 'Lokasi tidak tersedia')}</span>
+                          <MapPin className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{report.lokasi || 'Lokasi tidak tersedia'}</span>
                         </div>
+                        
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                            <Shield className="w-3 h-3 inline mr-1" />
+                            {getConditionText(report.bau, 'bau')}
+                          </span>
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                            <Thermometer className="w-3 h-3 inline mr-1" />
+                            {getConditionText(report.rasa, 'rasa')}
+                          </span>
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+                            <Droplets className="w-3 h-3 inline mr-1" />
+                            {getConditionText(report.warna, 'warna')}
+                          </span>
+                        </div>
+                        
                         <p className="text-sm text-gray-500 line-clamp-2">
-                          {getSafeValue(report.keterangan, 'Tidak ada keterangan')}
+                          {report.keterangan || 'Tidak ada keterangan'}
                         </p>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(report.status)}`}>
-                          {getStatusText(report.status)}
-                        </span>
+                      
+                      <div className="flex flex-col items-end gap-2 ml-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(report.status)}`}>
+                            {getStatusIcon(report.status)}
+                            {getStatusText(report.status)}
+                          </span>
+                        </div>
+                        
                         {report.lab_result && (
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getSafetyColor(report.lab_result.safety_level)}`}>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getSafetyColor(report.lab_result.safety_level)}`}>
+                            {getSafetyIcon(report.lab_result.safety_level)}
                             {getSafetyText(report.lab_result.safety_level)}
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm text-gray-500">
+                    
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
                       <div className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {formatDateSafe(report.created_at)}
+                        <Calendar className="w-3 h-3" />
+                        {formatDateSafe(report.created_at, 'dd/MM/yy HH:mm')}
                       </div>
-                      <ChevronRight className={`w-5 h-5 ${
+                      <ChevronRight className={`w-4 h-4 ${
                         selectedReport?.id === report.id ? 'text-blue-500' : 'text-gray-400'
                       }`} />
                     </div>
@@ -1006,97 +986,114 @@ const labRows = [
             <div className="space-y-6">
               {/* Report Summary */}
               <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div>
+                <div className="flex flex-col md:flex-row md:items-start justify-between mb-6 gap-4">
+                  <div className="flex-1">
                     <h2 className="text-xl font-semibold text-gray-800 mb-2">
                       Detail Laporan
                     </h2>
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-gray-500" />
-                        <span>{getSafeValue(selectedReport.user?.nama, 'Tidak diketahui')}</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="text-gray-500 text-sm">{getSafeValue(selectedReport.user?.phone, '-')}</span>
+                        <span className="font-medium">{selectedReport.users?.nama || 'Tidak diketahui'}</span>
+                        <span className="text-gray-400 hidden md:inline">•</span>
+                        <span className="text-gray-500 text-sm">{selectedReport.users?.phone || '-'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-gray-500" />
-                        <span>{getSafeValue(selectedReport.lokasi, 'Lokasi tidak tersedia')}</span>
+                        <span>{selectedReport.lokasi || 'Lokasi tidak tersedia'}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <span className={`px-4 py-2 rounded-full font-medium ${getStatusColor(selectedReport.status)}`}>
+                  
+                  <div className="flex flex-col items-start md:items-end gap-2">
+                    <span className={`px-4 py-2 rounded-full font-medium flex items-center gap-2 ${getStatusColor(selectedReport.status)}`}>
+                      {getStatusIcon(selectedReport.status)}
                       {getStatusText(selectedReport.status)}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {formatDateTimeSafe(selectedReport.created_at)}
+                      Dilaporkan: {formatDateSafe(selectedReport.created_at, 'dd MMM yyyy HH:mm')}
                     </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Kondisi Air Dilaporkan</h3>
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">Kondisi Air Dilaporkan</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Bau:</span>
-                        <span className="font-medium capitalize">{getSafeValue(selectedReport.bau, 'Tidak ada')?.replace('_', ' ')}</span>
+                        <span className="font-medium">{getConditionText(selectedReport.bau, 'bau')}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Rasa:</span>
-                        <span className="font-medium capitalize">{getSafeValue(selectedReport.rasa, 'Tidak ada')}</span>
+                        <span className="font-medium">{getConditionText(selectedReport.rasa, 'rasa')}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Warna:</span>
-                        <span className="font-medium capitalize">{getSafeValue(selectedReport.warna, 'Tidak ada')}</span>
+                        <span className="font-medium">{getConditionText(selectedReport.warna, 'warna')}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Kecamatan:</span>
-                        <span className="font-medium">{getSafeValue(selectedReport.kecamatan, 'Tidak diketahui')}</span>
+                        <span className="font-medium">{selectedReport.kecamatan || 'Tidak diketahui'}</span>
                       </div>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Deskripsi</h3>
-                    <p className="text-gray-700 whitespace-pre-line p-3 bg-gray-50 rounded-lg">
-                      {getSafeValue(selectedReport.keterangan, 'Tidak ada deskripsi')}
-                    </p>
+                    <h3 className="text-sm font-medium text-gray-700 mb-3">Deskripsi Lengkap</h3>
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-gray-700 whitespace-pre-line">
+                        {selectedReport.keterangan || 'Tidak ada deskripsi'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {selectedReport.foto_url && (
+                {selectedReport.foto_url && selectedReport.foto_url !== '' && (
                   <div className="mt-6">
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Foto Pendukung</h3>
-                    <img
-                      src={selectedReport.foto_url || '/placeholder-image.jpg'}
-                      alt="Foto laporan air"
-                      className="w-full max-w-md rounded-lg shadow-md"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/placeholder-image.jpg';
-                      }}
-                    />
+                    <div className="relative">
+                      <img
+                        src={selectedReport.foto_url}
+                        alt="Foto laporan air"
+                        className="w-full max-w-md rounded-lg shadow-md border border-gray-200"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/placeholder-image.jpg';
+                          (e.target as HTMLImageElement).classList.add('opacity-50');
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
 
                 {selectedReport.lab_result && (
                   <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <h3 className="text-sm font-medium text-green-800 mb-2">Hasil Analisis Sebelumnya</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-medium text-green-800">Hasil Analisis Sebelumnya</h3>
+                      <span className="text-xs text-green-600">✓ Sudah dianalisis</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <span className="text-gray-600 text-sm">Tingkat Keamanan:</span>
-                        <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${getSafetyColor(selectedReport.lab_result.safety_level)}`}>
-                          {getSafetyText(selectedReport.lab_result.safety_level)}
-                        </span>
+                        <div className="mt-1">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${getSafetyColor(selectedReport.lab_result.safety_level)}`}>
+                            {getSafetyIcon(selectedReport.lab_result.safety_level)}
+                            {getSafetyText(selectedReport.lab_result.safety_level)}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <span className="text-gray-600 text-sm">pH Level:</span>
-                        <span className="font-medium ml-2">{getSafeValue(selectedReport.lab_result.ph_level, '-')}</span>
+                        <span className="font-medium ml-2">{selectedReport.lab_result.ph_level || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 text-sm">Bakteri:</span>
+                        <span className="font-medium ml-2">{selectedReport.lab_result.bacteria_count || 0} CFU/mL</span>
                       </div>
                       <div>
                         <span className="text-gray-600 text-sm">Tanggal Test:</span>
-                        <span className="font-medium ml-2">
-                          {formatDateSafe(selectedReport.lab_result.test_date)}
+                        <span className="font-medium ml-2 text-sm">
+                          {formatDateSafe(selectedReport.lab_result.test_date, 'dd/MM/yy')}
                         </span>
                       </div>
                     </div>
@@ -1111,8 +1108,8 @@ const labRows = [
                   <h2 className="text-xl font-semibold text-gray-800">
                     Form Analisis Laboratorium
                     {selectedReport.lab_result && (
-                      <span className="text-sm text-green-600 ml-2">
-                        ✓ Hasil lab tersedia
+                      <span className="text-sm text-green-600 ml-2 font-normal">
+                        (Update Hasil)
                       </span>
                     )}
                   </h2>
@@ -1126,22 +1123,17 @@ const labRows = [
                         Jumlah Bakteri (CFU/mL)
                       </label>
                       <input
-                       type="number"
-                        value={Number.isNaN(formData.bacteria_count) ? '' : formData.bacteria_count}
-                      onChange={(e) => {
-                      const value = e.target.value;
-
-                      setFormData({
-                        ...formData,
-                      bacteria_count:
-                      value === '' ? NaN : parseInt(value)
-                       });
-                      }}
+                        type="number"
+                        value={formData.bacteria_count || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          bacteria_count: parseInt(e.target.value) || 0
+                        })}
                         min="0"
                         step="1"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="0"
                       />
-
                       <p className="text-xs text-gray-500 mt-1">
                         Standar aman: &lt; 100 CFU/mL
                       </p>
@@ -1153,26 +1145,20 @@ const labRows = [
                         Tingkat pH
                       </label>
                       <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-4">
                         <input
-                        type="range"
-                          min={0}
-                          max={14}
-                          step={0.1}
-                        value={formData.ph_level ?? 7.0}
-                        onChange={(e) => {
-                    const value = Number(e.target.value)
-                      setFormData({
-                       ...formData,
-                      ph_level: Number.isNaN(value) ? 7.0 : value,
-                      })
-                    }}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                    />
-                </div>
-
-                        <span className="text-lg font-semibold min-w-[50px]">
-                          {getSafeValue(formData.ph_level, 7.0).toFixed(1)}
+                          type="range"
+                          min="0"
+                          max="14"
+                          step="0.1"
+                          value={formData.ph_level}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            ph_level: parseFloat(e.target.value)
+                          })}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-lg font-semibold min-w-[50px] text-center">
+                          {formData.ph_level.toFixed(1)}
                         </span>
                       </div>
                       <div className="flex justify-between mt-1 text-xs text-gray-500">
@@ -1190,10 +1176,14 @@ const labRows = [
                       <input
                         type="number"
                         step="0.1"
-                        value={getSafeValue(formData.turbidity, 0)}
-                        onChange={(e) => setFormData({...formData, turbidity: parseFloat(e.target.value) || 0})}
+                        value={formData.turbidity}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          turbidity: parseFloat(e.target.value) || 0
+                        })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
+                        placeholder="0"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Maksimal: 5 NTU
@@ -1207,11 +1197,15 @@ const labRows = [
                       </label>
                       <input
                         type="number"
-                        step="0.1"
-                        value={getSafeValue(formData.chlorine, 0.2)}
-                        onChange={(e) => setFormData({...formData, chlorine: parseFloat(e.target.value) || 0.2})}
+                        step="0.01"
+                        value={formData.chlorine}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          chlorine: parseFloat(e.target.value) || 0.2
+                        })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
+                        placeholder="0.2"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Ideal: 0.2-0.5 mg/L
@@ -1225,10 +1219,14 @@ const labRows = [
                       </label>
                       <input
                         type="number"
-                        value={getSafeValue(formData.total_dissolved_solids, 150)}
-                        onChange={(e) => setFormData({...formData, total_dissolved_solids: parseInt(e.target.value) || 150})}
+                        value={formData.total_dissolved_solids}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          total_dissolved_solids: parseInt(e.target.value) || 150
+                        })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         min="0"
+                        placeholder="150"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Maksimal: 500 mg/L
@@ -1239,28 +1237,44 @@ const labRows = [
                   {/* Checkboxes */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                      <label className="flex items-center gap-3">
+                      <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={getSafeValue(formData.heavy_metals, false)}
-                          onChange={(e) => setFormData({...formData, heavy_metals: e.target.checked})}
+                          checked={formData.heavy_metals}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            heavy_metals: e.target.checked
+                          })}
                           className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm font-medium text-gray-700">
-                          Terdeteksi Logam Berat
-                        </span>
+                        <div>
+                          <span className="text-sm font-medium text-gray-700">
+                            Terdeteksi Logam Berat
+                          </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Timbal, merkuri, arsenik, dll.
+                          </p>
+                        </div>
                       </label>
                       
-                      <label className="flex items-center gap-3">
+                      <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={getSafeValue(formData.e_coli_present, false)}
-                          onChange={(e) => setFormData({...formData, e_coli_present: e.target.checked})}
+                          checked={formData.e_coli_present}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            e_coli_present: e.target.checked
+                          })}
                           className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                         />
-                        <span className="text-sm font-medium text-gray-700">
-                          E. coli Ditemukan
-                        </span>
+                        <div>
+                          <span className="text-sm font-medium text-gray-700">
+                            E. coli Ditemukan
+                          </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Indikator kontaminasi tinja
+                          </p>
+                        </div>
                       </label>
                     </div>
 
@@ -1270,25 +1284,31 @@ const labRows = [
                         Catatan Teknisi
                       </label>
                       <textarea
-                        value={getSafeValue(formData.technician_notes, '')}
-                        onChange={(e) => setFormData({...formData, technician_notes: e.target.value})}
-                        rows={3}
+                        value={formData.technician_notes}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          technician_notes: e.target.value
+                        })}
+                        rows={4}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Tambahkan catatan penting..."
+                        placeholder="Tambahkan catatan penting, rekomendasi, atau observasi khusus..."
                         maxLength={500}
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        {formData.technician_notes.length}/500 karakter
+                      </p>
                     </div>
                   </div>
 
                   {/* Preview Safety Level */}
                   <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-3">
                       <div>
                         <h3 className="font-semibold text-gray-800 mb-1">
                           Prakiraan Tingkat Keamanan
                         </h3>
                         <p className="text-sm text-gray-600">
-                          Berdasarkan data yang diinput
+                          Berdasarkan parameter yang diinput
                         </p>
                       </div>
                       <div className={`px-4 py-2 rounded-full font-semibold flex items-center gap-2 ${getSafetyColor(currentAnalysis.safety_level)}`}>
@@ -1298,6 +1318,9 @@ const labRows = [
                           <AlertTriangle className="w-5 h-5" />
                         )}
                         <span>{getSafetyText(currentAnalysis.safety_level)}</span>
+                        <span className="text-sm font-normal">
+                          (Skor: {currentAnalysis.score}/100)
+                        </span>
                       </div>
                     </div>
                     
@@ -1314,38 +1337,46 @@ const labRows = [
                         </ul>
                       </div>
                     )}
+                    
+                    {currentAnalysis.issues.length === 0 && (
+                      <div className="text-sm text-green-600 flex items-center gap-2 mt-2">
+                        <CheckCircle className="w-4 h-4" />
+                        Semua parameter dalam batas aman
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-4 pt-6 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-200">
                     <button
                       type="submit"
                       disabled={saving}
-                      className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                      className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
                     >
                       {saving ? (
-    <>
-      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-      Menyimpan...
-    </>
-  ) : (
-    <>
-      <Save className="w-5 h-5" />
-      {selectedReport.lab_result ? 'Update Hasil Analisis' : 'Simpan Hasil Analisis'}
-    </>
-  )}
-</button>
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Menyimpan...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-5 h-5" />
+                          {selectedReport.lab_result ? 'Update Hasil Analisis' : 'Simpan Hasil Analisis'}
+                        </>
+                      )}
+                    </button>
 
                     <button
                       type="button"
                       onClick={() => {
                         if (selectedReport.lab_result) {
-                          toast.success('Laporan PDF sedang dipersiapkan');
+                          toast.success('Laporan PDF sedang dipersiapkan...');
                         } else {
-                          toast.error('Belum ada hasil analisis');
+                          toast.error('Belum ada hasil analisis untuk diekspor');
                         }
                       }}
-                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors flex items-center gap-3"
+                      className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-3"
+                      disabled={!selectedReport.lab_result}
                     >
                       <Download className="w-5 h-5" />
                       Export PDF
@@ -1356,15 +1387,26 @@ const labRows = [
             </div>
           ) : (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-              <FlaskConical className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                {reports.length === 0 ? 'Tidak ada laporan tersedia' : 'Pilih Laporan untuk Analisis'}
-              </h3>
-              <p className="text-gray-600 max-w-md mx-auto">
-                {reports.length === 0 
-                  ? `Belum ada laporan yang masuk di kecamatan ${profile?.kecamatan || 'Anda'}` 
-                  : 'Klik pada salah satu laporan di sebelah kiri untuk melihat detail dan melakukan analisis laboratorium'}
-              </p>
+              <div className="flex flex-col items-center">
+                <FlaskConical className="w-16 h-16 text-gray-300 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                  {reports.length === 0 ? 'Belum Ada Laporan' : 'Pilih Laporan untuk Analisis'}
+                </h3>
+                <p className="text-gray-600 max-w-md mx-auto mb-6">
+                  {reports.length === 0 
+                    ? `Belum ada laporan yang masuk di kecamatan ${profile?.kecamatan || 'Anda'}`
+                    : 'Klik pada salah satu laporan di sebelah kiri untuk melihat detail dan melakukan analisis laboratorium'}
+                </p>
+                {reports.length === 0 && (
+                  <button
+                    onClick={handleRefresh}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh Data
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
