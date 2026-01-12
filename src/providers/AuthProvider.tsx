@@ -3,11 +3,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 type AuthContextType = {
   user: User | null;
   session: Session | null;
+  profile: any | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (data: SignUpData) => Promise<any>;
@@ -29,8 +30,52 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
+
+  // ✅ FUNGSI CEPAT DETECT ROLE DARI EMAIL (TANPA QUERY DATABASE)
+  const detectRoleFromEmail = (email: string) => {
+    const emailLower = email.toLowerCase();
+    
+    // LOGIC SEDERHANA:
+    if (emailLower.includes('admin')) {
+      return 'admin';
+    } else if (emailLower.includes('puskesmas') || emailLower.includes('pkm')) {
+      return 'puskesmas';
+    } else {
+      return 'warga';
+    }
+  };
+
+  // ✅ FUNGSI CEPAT UNTUK DAPATKAN PROFILE (TANPA BLOCKING)
+  const getQuickProfile = (user: User) => {
+    const email = user.email?.toLowerCase() || '';
+    const role = detectRoleFromEmail(email);
+    
+    // PROFILE DASAR DARI EMAIL
+    const baseProfile = {
+      id: user.id,
+      email: user.email,
+      nama: user.email?.split('@')[0] || 'User',
+      role: role,
+      kecamatan: 'Semarang Barat' // Default
+    };
+
+    // TAMBAHAN UNTUK PUSKESMAS
+    if (role === 'puskesmas') {
+      return {
+        ...baseProfile,
+        puskesmas_id: user.id, // Asumsi ID puskesmas = user id
+        nama: `Puskesmas ${user.email?.split('@')[0] || ''}`,
+        alamat: 'Jl. Puskesmas No. 1',
+        phone: '021-1234567'
+      };
+    }
+
+    return baseProfile;
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -40,225 +85,221 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        console.log('🔍 Initial session:', initialSession?.user?.email);
+        console.log('🚀 Initializing auth...');
+        
+        // 1. GET SESSION (CEPAT)
+        const { data: { session: initialSession }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('✅ Session loaded:', initialSession?.user?.email);
         
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
         
+        // 2. JIKA ADA USER, SET PROFILE CEPAT
+        if (initialSession?.user) {
+          console.log('🔄 Setting quick profile...');
+          const quickProfile = getQuickProfile(initialSession.user);
+          setProfile(quickProfile);
+          console.log('✅ Profile set:', quickProfile.role);
+          
+          // 3. REDIRECT CEPAT BERDASARKAN EMAIL
+          const currentPath = pathname;
+          const publicPages = ['/', '/login', '/register', '/auth/callback'];
+          
+          if (publicPages.includes(currentPath)) {
+            console.log('📍 At public page, redirecting...');
+            setTimeout(() => {
+              if (quickProfile.role === 'admin') {
+                router.replace('/admin');
+              } else if (quickProfile.role === 'puskesmas') {
+                router.replace('/puskesmas');
+              } else {
+                router.replace('/dashboard');
+              }
+            }, 100); // Delay kecil
+          }
+        } else {
+          setProfile(null);
+        }
+
+        // 4. SETUP AUTH LISTENER
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (event, newSession) => {
-            console.log('🔄 Auth state changed:', event);
+          async (event, newSession) => {
+            console.log('🔄 Auth state:', event);
+            
             setSession(newSession);
             setUser(newSession?.user ?? null);
             
-            if (event === 'SIGNED_IN') {
-              router.push('/dashboard');
+            if (event === 'SIGNED_IN' && newSession?.user) {
+              // SET PROFILE CEPAT
+              const quickProfile = getQuickProfile(newSession.user);
+              setProfile(quickProfile);
+              
+              // REDIRECT CEPAT
+              setTimeout(() => {
+                if (quickProfile.role === 'admin') {
+                  router.replace('/admin');
+                } else if (quickProfile.role === 'puskesmas') {
+                  router.replace('/puskesmas');
+                } else {
+                  router.replace('/dashboard');
+                }
+              }, 100);
+              
             } else if (event === 'SIGNED_OUT') {
+              setProfile(null);
               router.push('/login');
             }
           }
         );
 
         return () => subscription.unsubscribe();
+        
       } catch (error) {
         console.error('❌ Auth init error:', error);
       } finally {
+        // TIDAK PERLU SET TIMEOUT, LANGSUNG SET LOADING FALSE
         setIsLoading(false);
       }
     };
 
     initializeAuth();
-  }, [router]);
+  }, [router, pathname]);
 
+  // ✅ SIGN IN YANG CEPAT
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('🔑 Attempting login for:', email);
+      
+      const startTime = Date.now();
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.toLowerCase().trim(),
         password,
       });
-      return { data, error };
+
+      const authTime = Date.now() - startTime;
+      console.log(`✅ Auth completed in ${authTime}ms`);
+      
+      if (error) {
+        console.error('❌ Login error:', error);
+        return { data: null, error };
+      }
+
+      console.log('✅ Login successful for:', data.user?.email);
+      
+      // SET PROFILE CEPAT
+      const quickProfile = getQuickProfile(data.user);
+      setProfile(quickProfile);
+      
+      // REDIRECT CEPAT
+      console.log('🚀 Quick redirect to:', quickProfile.role);
+      if (quickProfile.role === 'admin') {
+        router.push('/admin');
+      } else if (quickProfile.role === 'puskesmas') {
+        router.push('/puskesmas');
+      } else {
+        router.push('/dashboard');
+      }
+
+      return { data, error: null };
+      
     } catch (error: any) {
       console.error('❌ Sign in error:', error);
       return { data: null, error };
     }
   };
 
-  // ✅✅✅ FIXED SIGNUP FUNCTION - PASTI MASUK DATABASE ✅✅✅
+  // ✅ SIGN UP (SEDERHANA)
   const signUp = async (userData: SignUpData) => {
-    console.log('🚀 ========== START SIGNUP ==========');
-    console.log('📝 User Data:', userData);
+    console.log('🚀 Quick signup for:', userData.email);
     
     try {
-      // 1️⃣ SIGNUP AUTH
-      console.log('1️⃣ Starting auth signup...');
+      // 1. Auth signup
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
       });
 
-      if (authError) {
-        console.error('❌ Auth error:', authError);
-        throw authError;
-      }
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('No user returned');
 
-      if (!authData.user) {
-        throw new Error('No user returned from auth');
-      }
-
-      console.log('✅ Auth success! User ID:', authData.user.id);
-      console.log('📧 User email:', authData.user.email);
-
-      // 2️⃣ CARI PUSKESMAS
-      console.log('2️⃣ Searching puskesmas for:', userData.kecamatan);
+      console.log('✅ Auth success');
       
-      // Query sederhana, cari puskesmas di kecamatan
-      const { data: puskesmas, error: puskesmasError } = await supabase
-        .from('puskesmas')
-        .select('id')
-        .eq('kecamatan', userData.kecamatan)
-        .limit(1);
-
-      let puskesmasId = null;
-      if (!puskesmasError && puskesmas && puskesmas.length > 0) {
-        puskesmasId = puskesmas[0].id;
-        console.log('📍 Found puskesmas ID:', puskesmasId);
-      } else {
-        console.log('⚠️ No puskesmas found, using null');
-      }
-
-      // 3️⃣ BUILD USER DATA - HANYA KOLOM YANG ADA DI TABLE
-      const userRecord = {
+      // 2. Set profile cepat
+      const quickProfile = {
         id: authData.user.id,
         email: userData.email,
         nama: userData.nama,
-        nik: userData.nik,
-        phone: userData.phone,
-        kecamatan: userData.kecamatan,
-        kelurahan: userData.kelurahan,
-        puskesmas_id: puskesmasId,
         role: 'warga',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        kecamatan: userData.kecamatan,
+        kelurahan: userData.kelurahan
       };
-
-      console.log('3️⃣ User record to insert:', JSON.stringify(userRecord, null, 2));
-
-      // 4️⃣ INSERT KE DATABASE - PAKAI UPSERT (INSERT OR UPDATE)
-      console.log('4️⃣ Inserting into database...');
       
-      // Coba INSERT dulu
-      const { error: insertError } = await supabase
-        .from('users')
-        .insert(userRecord);
-
-      if (insertError) {
-        console.log('⚠️ Insert failed, trying upsert...');
-        console.log('Insert error:', insertError);
-        
-        // Coba UPSERT (update if exists)
-        const { error: upsertError } = await supabase
-          .from('users')
-          .upsert(userRecord, {
-            onConflict: 'id',
-            ignoreDuplicates: false
-          });
-
-        if (upsertError) {
-          console.error('❌ Upsert also failed:', upsertError);
-          
-          // Coba INSERT tanpa ID (biarkan database generate)
-          const { error: insertWithoutIdError } = await supabase
-            .from('users')
-            .insert({
-              email: userData.email,
-              nama: userData.nama,
-              nik: userData.nik,
-              phone: userData.phone,
-              kecamatan: userData.kecamatan,
-              kelurahan: userData.kelurahan,
-              puskesmas_id: puskesmasId,
-              role: 'warga'
-            });
-
-          if (insertWithoutIdError) {
-            console.error('❌ Final insert failed:', insertWithoutIdError);
-            throw insertWithoutIdError;
-          } else {
-            console.log('✅ Insert without ID succeeded!');
-          }
-        } else {
-          console.log('✅ Upsert succeeded!');
-        }
-      } else {
-        console.log('✅ Insert succeeded!');
-      }
-
-      // 5️⃣ VERIFIKASI DATA MASUK
-      console.log('5️⃣ Verifying data in database...');
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('users')
-        .select('id, email, nama')
-        .eq('email', userData.email)
-        .maybeSingle();
-
-      if (verifyError) {
-        console.warn('⚠️ Verification error:', verifyError);
-      } else if (verifyData) {
-        console.log('✅ VERIFICATION PASSED! User in database:');
-        console.log('   ID:', verifyData.id);
-        console.log('   Email:', verifyData.email);
-        console.log('   Name:', verifyData.nama);
-      } else {
-        console.log('❌ User not found in database after insert!');
-      }
-
-      console.log('🎉 ========== SIGNUP COMPLETE ==========');
+      setProfile(quickProfile);
       
-      // Auto sign in setelah signup
-      const { data: signInData } = await supabase.auth.signInWithPassword({
-        email: userData.email,
-        password: userData.password,
-      });
-
+      // 3. Redirect ke dashboard
+      router.push('/dashboard');
+      
+      // 4. Return success
       return { 
         data: { 
-          user: signInData?.user || authData.user,
-          session: signInData?.session 
+          user: authData.user,
+          profile: quickProfile
         }, 
         error: null 
       };
       
     } catch (error: any) {
-      console.error('❌ ========== SIGNUP FAILED ==========');
-      console.error('Error:', error);
-      console.error('Error code:', error.code);
-      console.error('Error message:', error.message);
-      console.error('Error details:', error.details);
-      console.error('Error hint:', error.hint);
-      
-      return { 
-        data: null, 
-        error: {
-          message: error.message || 'Signup failed',
-          code: error.code,
-          details: error.details
-        }
-      };
+      console.error('❌ Quick signup failed:', error);
+      return { data: null, error };
     }
   };
 
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
+      setProfile(null);
       router.push('/login');
     } catch (error) {
       console.error('❌ Sign out error:', error);
     }
   };
 
+  // ✅ LOADING STATE YANG LEBIH CEPAT
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
+        <div className="relative mb-4">
+          <div className="w-12 h-12 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        
+        <h2 className="text-lg font-semibold text-blue-700 mb-1">
+          Air Bersih
+        </h2>
+        <p className="text-sm text-gray-500">
+          Memuat aplikasi...
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session, 
+      profile,
+      isLoading, 
+      signIn, 
+      signUp, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );

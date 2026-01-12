@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/providers/AuthProvider';
 import {
   Droplets,
