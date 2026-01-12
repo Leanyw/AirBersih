@@ -1,124 +1,143 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
   },
-});
+})
 
-// Helper function untuk auth - FIXED
+// Helper functions - CLIENT SIDE ONLY
 export const getCurrentUser = async () => {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error) throw error;
-  return user;
-};
-
-const storageBucket = process.env.NEXT_PUBLIC_STORAGE_BUCKET || 'laporan-images';
-
-// Update fungsi uploadImage
-export const uploadImage = async (file: File, userId: string): Promise<string> => {
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${userId}/${Date.now()}.${fileExt}`;
-  
-  const { error } = await supabase.storage
-    .from(storageBucket) // 🔥 PAKAI VARIABLE
-    .upload(fileName, file);
-
-  if (error) throw error;
-
-  const { data } = supabase.storage
-    .from(storageBucket) // 🔥 PAKAI VARIABLE
-    .getPublicUrl(fileName);
-
-  return data.publicUrl;
-};
-
-
-// Test function untuk cek koneksi
-export const testSupabaseConnection = async () => {
   try {
-    console.log('🔄 Testing Supabase connection...');
-    
-    // Test query sederhana
-    const { data, error } = await supabase
-      .from('tutorials')
-      .select('count')
-      .limit(1);
-    
-    if (error) {
-      console.error('❌ Supabase connection error:', error);
-      return { success: false, error };
-    }
-    
-    console.log('✅ Supabase connected successfully');
-    return { success: true, data };
-  } catch (err) {
-    console.error('❌ Supabase test failed:', err);
-    return { success: false, error: err };
-  }
-};
-
-// FUNGSI BARU: Cek apakah bucket ada
-export const checkBucketExists = async (): Promise<{ exists: boolean; error?: string }> => {
-  try {
-    console.log('🔍 Checking if bucket exists...');
-    
-    // Coba list buckets
-    const { data: buckets, error } = await supabase.storage.listBuckets();
-    
-    if (error) {
-      console.error('Error listing buckets:', error);
-      return { exists: false, error: error.message };
-    }
-    
-    const bucketExists = buckets?.some(bucket => bucket.name === 'laporan-images');
-    console.log('📦 Bucket exists:', bucketExists);
-    
-    return { exists: bucketExists || false };
-  } catch (error: any) {
-    console.error('Bucket check failed:', error);
-    return { exists: false, error: error.message };
-  }
-};
-
-// FUNGSI BARU: Simpan sementara di localStorage jika offline
-export const saveImageOffline = async (file: File, userId: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64data = reader.result as string;
-      
-      // Simpan ke localStorage dengan key unik
-      const key = `offline_image_${userId}_${Date.now()}`;
-      localStorage.setItem(key, JSON.stringify({
-        data: base64data,
-        filename: file.name,
-        type: file.type,
-        timestamp: new Date().toISOString()
-      }));
-      
-      console.log('💾 Image saved offline with key:', key);
-      resolve(key); // Return key untuk referensi
-    };
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsDataURL(file);
-  });
-};
-
-// FUNGSI BARU: Ambil gambar dari offline storage
-export const getOfflineImage = (key: string): string | null => {
-  const item = localStorage.getItem(key);
-  if (!item) return null;
-  
-  try {
-    const data = JSON.parse(item);
-    return data.data; // base64 string
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) throw error
+    return user
   } catch (error) {
-    console.error('Error getting offline image:', error);
-    return null;
+    console.error('Error getting current user:', error)
+    return null
   }
-};
+}
+
+export const getUserProfile = async (userId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        puskesmas (*)
+      `)
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      console.warn('User profile not found, trying puskesmas table...')
+      
+      // Try puskesmas table
+      const { data: puskesmasData, error: puskesmasError } = await supabase
+        .from('puskesmas')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (puskesmasError) {
+        // Create default profile from auth
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return null
+
+        const email = user.email?.toLowerCase() || ''
+        let role = 'warga'
+        
+        if (email.includes('puskesmas') || email.includes('pkm')) {
+          role = 'puskesmas'
+        } else if (email.includes('admin')) {
+          role = 'admin'
+        }
+
+        return {
+          id: userId,
+          email: user.email,
+          nama: user.user_metadata?.nama || user.email?.split('@')[0] || 'User',
+          role,
+          kecamatan: 'Semarang Tengah',
+          puskesmas_id: null
+        }
+      }
+
+      return {
+        ...puskesmasData,
+        role: 'puskesmas'
+      }
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting user profile:', error)
+    return null
+  }
+}
+
+export const getPuskesmasByKecamatan = async (kecamatan: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('puskesmas')
+      .select('*')
+      .eq('kecamatan', kecamatan)
+      .single()
+
+    if (error) {
+      console.error('Error getting puskesmas:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error in getPuskesmasByKecamatan:', error)
+    return null
+  }
+}
+
+export const getAllKecamatan = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('puskesmas')
+      .select('kecamatan')
+      .order('kecamatan')
+
+    if (error) {
+      console.error('Error getting kecamatan:', error)
+      return []
+    }
+
+    return data.map(p => p.kecamatan)
+  } catch (error) {
+    console.error('Error in getAllKecamatan:', error)
+    return []
+  }
+}
+
+// Upload image
+export const uploadImage = async (file: File, userId: string) => {
+  try {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/${Date.now()}.${fileExt}`
+    
+    const { error } = await supabase.storage
+      .from('air-bersih')
+      .upload(fileName, file)
+
+    if (error) throw error
+
+    const { data } = supabase.storage
+      .from('air-bersih')
+      .getPublicUrl(fileName)
+
+    return data.publicUrl
+  } catch (error) {
+    console.error('Error uploading image:', error)
+    throw error
+  }
+}
