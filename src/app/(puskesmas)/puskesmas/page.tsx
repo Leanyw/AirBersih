@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/providers/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import { 
+import {
   Bell,
   Clock,
   CheckCircle,
@@ -83,28 +83,28 @@ export default function PuskesmasDashboard() {
     try {
       setIsLoading(true)
       setIsRefreshing(true)
-      
+
       console.log('🔍 Fetching dashboard data for puskesmas...')
-      
+
       // 1. Ambil data puskesmas (kecamatan)
       const kecamatan = profile?.kecamatan
       const puskesmasId = user?.id
-      
+
       if (!kecamatan || !puskesmasId) {
         toast.error('Data puskesmas tidak lengkap')
         return
       }
-      
+
       console.log('📍 Puskesmas data:', { kecamatan, puskesmasId })
-      
+
       // 2. Hitung statistik langsung dari database
       await fetchStats(kecamatan, puskesmasId)
-      
+
       // 3. Ambil laporan terbaru
       await fetchRecentReports(kecamatan, puskesmasId)
-      
+
       console.log('✅ Dashboard data fetched successfully')
-      
+
     } catch (error: any) {
       console.error('❌ Error fetching dashboard data:', error)
       toast.error('Gagal memuat data dashboard')
@@ -117,65 +117,65 @@ export default function PuskesmasDashboard() {
   const fetchStats = async (kecamatan: string, puskesmasId: string) => {
     try {
       console.log('📊 Fetching stats...')
-      
+
       // 1. Hitung total laporan berdasarkan kecamatan warga
       const { data: wargaDiWilayah } = await supabase
         .from('users')
         .select('id')
         .eq('kecamatan', kecamatan)
         .eq('role', 'warga')
-      
+
       const wargaIds = wargaDiWilayah?.map(w => w.id) || []
-      
+
       let totalLaporan = 0
       let pendingLaporan = 0
       let diprosesLaporan = 0
       let selesaiLaporan = 0
       let ditolakLaporan = 0
-      
+
       if (wargaIds.length > 0) {
         const { data: reportsData } = await supabase
           .from('reports')
           .select('id, status')
           .in('user_id', wargaIds)
-        
+
         totalLaporan = reportsData?.length || 0
         pendingLaporan = reportsData?.filter(r => r.status === 'pending').length || 0
         diprosesLaporan = reportsData?.filter(r => r.status === 'diproses').length || 0
         selesaiLaporan = reportsData?.filter(r => r.status === 'selesai').length || 0
         ditolakLaporan = reportsData?.filter(r => r.status === 'ditolak').length || 0
       }
-      
+
       // 2. Hitung notifikasi baru untuk puskesmas
       const { data: notificationsData } = await supabase
         .from('notifications')
         .select('id, is_read')
         .eq('puskesmas_id', puskesmasId)
-      
+
       const notifikasiBaru = notificationsData?.filter(n => !n.is_read).length || 0
-      
+
       // 3. Hitung warga aktif (ada laporan dalam 30 hari terakhir)
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      
+
       const { data: activeUsersData } = await supabase
         .from('reports')
         .select('user_id')
         .in('user_id', wargaIds)
         .gte('created_at', thirtyDaysAgo.toISOString())
-      
+
       const uniqueActiveUsers = new Set(activeUsersData?.map(r => r.user_id) || [])
       const wargaAktif = uniqueActiveUsers.size
-      
+
       // 4. Hitung sumber air aktif di kecamatan
       const { data: waterSourcesData } = await supabase
         .from('water_sources')
         .select('id')
         .eq('kecamatan', kecamatan)
         .eq('status', 'aman')
-      
+
       const sumberAirAktif = waterSourcesData?.length || 0
-      
+
       console.log('📊 Stats calculated:', {
         totalLaporan,
         pendingLaporan,
@@ -185,7 +185,7 @@ export default function PuskesmasDashboard() {
         wargaAktif,
         sumberAirAktif
       })
-      
+
       setStats({
         totalLaporan,
         pendingLaporan,
@@ -196,7 +196,7 @@ export default function PuskesmasDashboard() {
         wargaAktif,
         sumberAirAktif
       })
-      
+
     } catch (error) {
       console.error('❌ Error fetching stats:', error)
       toast.error('Gagal memuat statistik')
@@ -206,22 +206,22 @@ export default function PuskesmasDashboard() {
   const fetchRecentReports = async (kecamatan: string, puskesmasId: string) => {
     try {
       console.log('📄 Fetching recent reports...')
-      
+
       // 1. Dapatkan warga di wilayah puskesmas
       const { data: wargaData } = await supabase
         .from('users')
         .select('id, nama, phone, email')
         .eq('kecamatan', kecamatan)
         .eq('role', 'warga')
-      
+
       const wargaIds = wargaData?.map(w => w.id) || []
       const wargaMap = new Map(wargaData?.map(w => [w.id, w]) || [])
-      
+
       if (wargaIds.length === 0) {
         setReports([])
         return
       }
-      
+
       // 2. Ambil laporan terbaru dari warga tersebut
       const { data: reportsData } = await supabase
         .from('reports')
@@ -229,16 +229,16 @@ export default function PuskesmasDashboard() {
         .in('user_id', wargaIds)
         .order('created_at', { ascending: false })
         .limit(10)
-      
+
       // 3. Gabungkan data warga dengan laporan
       const reportsWithUsers: Report[] = (reportsData || []).map(report => ({
         ...report,
         users: wargaMap.get(report.user_id)
       }))
-      
+
       console.log(`✅ Found ${reportsWithUsers.length} recent reports`)
       setReports(reportsWithUsers)
-      
+
     } catch (error) {
       console.error('❌ Error fetching reports:', error)
       toast.error('Gagal memuat laporan terbaru')
@@ -254,7 +254,7 @@ export default function PuskesmasDashboard() {
     try {
       const { error } = await supabase
         .from('reports')
-        .update({ 
+        .update({
           status,
           updated_at: new Date().toISOString()
         })
@@ -263,17 +263,17 @@ export default function PuskesmasDashboard() {
       if (error) throw error
 
       toast.success('Status berhasil diperbarui')
-      
+
       // Update local state
-      setReports(reports.map(report => 
-        report.id === reportId 
-          ? { ...report, status } 
+      setReports(reports.map(report =>
+        report.id === reportId
+          ? { ...report, status }
           : report
       ))
-      
+
       // Refresh stats
       fetchDashboardData()
-      
+
     } catch (error) {
       console.error('Error updating status:', error)
       toast.error('Gagal mengupdate status')
@@ -342,7 +342,7 @@ export default function PuskesmasDashboard() {
         'kehijauan': 'Kehijauan'
       }
     }
-    
+
     return texts[type]?.[condition] || condition
   }
 
@@ -350,19 +350,19 @@ export default function PuskesmasDashboard() {
   if (isLoading && !isRefreshing) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-white">
-      
-      <div className="relative mb-6">
-        <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
-        <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
-      </div>
 
-      <h2 className="text-xl font-bold text-blue-700">
-        Air Bersih
-      </h2>
-      <p className="text-sm text-gray-600">
-        Memuat data laporan...
-      </p>
-    </div>
+        <div className="relative mb-6">
+          <div className="absolute inset-0 animate-ping rounded-full bg-blue-400 opacity-30"></div>
+          <div className="relative animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent"></div>
+        </div>
+
+        <h2 className="text-xl font-bold text-blue-700">
+          Air Bersih
+        </h2>
+        <p className="text-sm text-gray-600">
+          Memuat data laporan...
+        </p>
+      </div>
     )
   }
 
@@ -378,14 +378,14 @@ export default function PuskesmasDashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button 
+            <button
               onClick={() => router.push('/analisis-lab')}
               className="bg-white text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2"
             >
               <Activity className="w-4 h-4" />
               Analisis Lab
             </button>
-            <button 
+            <button
               onClick={handleRefresh}
               disabled={isRefreshing}
               className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
@@ -395,7 +395,7 @@ export default function PuskesmasDashboard() {
             </button>
           </div>
         </div>
-        
+
         {/* Quick Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mt-6">
           <div className="bg-white/20 p-4 rounded-lg backdrop-blur-sm">
@@ -445,14 +445,14 @@ export default function PuskesmasDashboard() {
               </h2>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Cari laporan..."
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
-            
+
             {isRefreshing ? (
               <div className="text-center py-8">
                 <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -485,9 +485,9 @@ export default function PuskesmasDashboard() {
                             </div>
                           </div>
                         </div>
-                        
+
                         <p className="text-gray-700 mb-3 line-clamp-2">{report.keterangan}</p>
-                        
+
                         <div className="flex flex-wrap gap-3 mb-3">
                           <div className="flex items-center gap-1">
                             <Shield className="w-3 h-3 text-gray-400" />
@@ -508,7 +508,7 @@ export default function PuskesmasDashboard() {
                             </span>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-4 text-sm text-gray-500">
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
@@ -526,7 +526,7 @@ export default function PuskesmasDashboard() {
                           </span>
                         </div>
                       </div>
-                      
+
                       <div className="ml-4">
                         <div className="flex items-center gap-2 mb-2">
                           {getStatusIcon(report.status)}
@@ -536,12 +536,12 @@ export default function PuskesmasDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                       <div className="flex gap-2">
                         {report.status === 'pending' && (
                           <button
-                            onClick={() => updateReportStatus(report.id, 'diproses')}
+                            onClick={() => router.push('/analisis-lab')}
                             className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                           >
                             Proses Laporan
@@ -574,9 +574,9 @@ export default function PuskesmasDashboard() {
                 ))}
               </div>
             )}
-            
+
             <div className="mt-6 pt-6 border-t border-gray-200">
-              <button 
+              <button
                 onClick={() => router.push('/laporanwarga')}
                 className="w-full py-3 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
               >
@@ -596,7 +596,7 @@ export default function PuskesmasDashboard() {
               Aksi Cepat
             </h3>
             <div className="space-y-3">
-              <button 
+              <button
                 onClick={() => router.push('/notifikasipuskesmas')}
                 className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors group"
               >
@@ -609,8 +609,8 @@ export default function PuskesmasDashboard() {
                 </div>
                 <span className="text-blue-600 group-hover:translate-x-1 transition-transform">→</span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={() => router.push('/warga')}
                 className="w-full flex items-center justify-between p-4 bg-green-50 hover:bg-green-100 rounded-xl transition-colors group"
               >
@@ -623,8 +623,8 @@ export default function PuskesmasDashboard() {
                 </div>
                 <span className="text-green-600 group-hover:translate-x-1 transition-transform">→</span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={() => router.push('/analisis-lab')}
                 className="w-full flex items-center justify-between p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors group"
               >
@@ -708,9 +708,9 @@ export default function PuskesmasDashboard() {
             </div>
             <div className="mt-4 pt-4 border-t border-blue-200">
               <p className="text-sm text-gray-600">
-                Data diperbarui: {new Date().toLocaleTimeString('id-ID', { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
+                Data diperbarui: {new Date().toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit'
                 })}
               </p>
             </div>

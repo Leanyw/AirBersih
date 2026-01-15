@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { 
-  Bell, 
-  AlertTriangle, 
-  AlertCircle, 
-  Send, 
+import {
+  Bell,
+  AlertTriangle,
+  AlertCircle,
+  Send,
   Filter,
   Check,
   CheckCheck,
@@ -90,7 +90,7 @@ export default function PuskesmasNotifikasiPage() {
     urgent: 0,
     read: 0,
   });
-  
+
   const [filterType, setFilterType] = useState<'all' | 'unread' | 'report' | 'urgent'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
@@ -99,11 +99,11 @@ export default function PuskesmasNotifikasiPage() {
   // Fetch notifikasi dengan error handling yang lebih baik
   const fetchNotifications = useCallback(async () => {
     if (!user || !profile) return;
-    
+
     try {
       setIsRefreshing(true);
       console.log('🔍 Memulai fetch notifikasi untuk puskesmas:', user.id);
-      
+
       // Coba query yang lebih sederhana dulu
       let query = supabase
         .from('notifications')
@@ -115,7 +115,7 @@ export default function PuskesmasNotifikasiPage() {
 
       if (error) {
         console.error('❌ Error detail:', error);
-        
+
         // Cek jika tabel tidak ada
         if (error.code === '42P01' || error.message.includes('does not exist')) {
           console.log('📋 Tabel notifications tidak ditemukan, membuat contoh data...');
@@ -123,23 +123,112 @@ export default function PuskesmasNotifikasiPage() {
           processNotifications(mockData);
           return;
         }
-        
+
         throw error;
       }
 
       console.log(`✅ Ditemukan ${notificationsData?.length || 0} notifikasi`);
-      
-      // Jika ada data, fetch data terkait
-      if (notificationsData && notificationsData.length > 0) {
-        await enrichNotifications(notificationsData);
+
+      let allNotifications: any[] = notificationsData || [];
+
+      // --- TAMBAHAN: Fetch Reports sebagai Notifikasi ---
+      if (profile?.kecamatan) {
+        try {
+          console.log('🔄 Mengambil laporan warga untuk dijadikan notifikasi...');
+
+          // 1. Get users in kecamatan
+          const { data: usersData } = await supabase
+            .from('users')
+            .select('id, nama, email, phone')
+            .eq('kecamatan', profile.kecamatan)
+            .eq('role', 'warga');
+
+          // Buat map user untuk lookup cepat
+          const userMap = new Map();
+          if (usersData) {
+            usersData.forEach(u => userMap.set(u.id, u));
+          }
+
+          const userIds = usersData?.map(u => u.id) || [];
+
+          if (userIds.length > 0) {
+            // 2. Get pending/recent reports
+            const { data: reportsData } = await supabase
+              .from('reports')
+              .select('*')
+              .in('user_id', userIds)
+              .eq('status', 'pending')
+              .order('created_at', { ascending: false })
+              .limit(20);
+
+            if (reportsData && reportsData.length > 0) {
+              console.log(`📄 Ditemukan ${reportsData.length} laporan pending`);
+
+              // 3. Convert reports to notifications
+              const reportNotifications = reportsData.map(report => {
+                // Skip jika notifikasi real untuk report ini sudah ada
+                if (allNotifications.some(n => n.report_id === report.id)) {
+                  return null;
+                }
+
+                const reportUser = userMap.get(report.user_id);
+                // Virtual ID agar tidak konflik
+                const virtualId = `virtual-report-${report.id}`;
+
+                return {
+                  id: virtualId,
+                  user_id: report.user_id,
+                  puskesmas_id: user.id,
+                  title: '📋 Laporan Masuk Baru',
+                  message: `Laporan baru dari ${reportUser?.nama || 'Warga'} di ${report.lokasi}.`,
+                  type: 'report_new',
+                  is_read: false,
+                  created_at: report.created_at,
+                  report_id: report.id,
+                  metadata: {
+                    is_virtual: true,
+                    report_id: report.id,
+                    lokasi: report.lokasi,
+                    kondisi: {
+                      bau: report.bau,
+                      rasa: report.rasa,
+                      warna: report.warna
+                    }
+                  },
+                  users: reportUser,
+                  reports: report
+                };
+              }).filter(Boolean);
+
+              // Merge notifications
+              allNotifications = [...reportNotifications, ...allNotifications];
+
+              // Sort by date descending
+              allNotifications.sort((a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+            }
+          }
+        } catch (reportFetchError) {
+          console.error('⚠️ Gagal mengambil laporan untuk notifikasi:', reportFetchError);
+        }
+      }
+
+      // Process notifications
+      // Pisahkan yang dari DB asli dan yang virtual untuk enrich
+      const dbNotifs = allNotifications.filter(n => !n.id.toString().startsWith('virtual-'));
+      const virtualNotifs = allNotifications.filter(n => n.id.toString().startsWith('virtual-'));
+
+      if (dbNotifs.length > 0) {
+        await enrichNotifications(dbNotifs, virtualNotifs);
       } else {
-        processNotifications([]);
+        processNotifications(virtualNotifs);
       }
 
     } catch (error: any) {
       console.error('❌ Error dalam fetchNotifications:', error);
       toast.error(`Gagal memuat notifikasi: ${error.message || 'Unknown error'}`);
-      
+
       // Fallback ke mock data
       const mockData = await createMockNotifications();
       processNotifications(mockData);
@@ -150,14 +239,14 @@ export default function PuskesmasNotifikasiPage() {
   }, [user, profile]);
 
   // Enrich notifikasi dengan data user dan reports
-  const enrichNotifications = async (notificationsData: any[]) => {
+  const enrichNotifications = async (notificationsData: any[], extraNotifications: any[] = []) => {
     try {
       const enrichedNotifications: Notification[] = [];
-      
+
       for (const notif of notificationsData) {
         let userData = null;
         let reportData = null;
-        
+
         // Ambil data user jika ada user_id
         if (notif.user_id) {
           const { data: user } = await supabase
@@ -165,10 +254,10 @@ export default function PuskesmasNotifikasiPage() {
             .select('nama, email, phone')
             .eq('id', notif.user_id)
             .single();
-          
+
           userData = user;
         }
-        
+
         // Ambil data report jika ada report_id
         if (notif.report_id) {
           const { data: report } = await supabase
@@ -176,34 +265,42 @@ export default function PuskesmasNotifikasiPage() {
             .select('id, lokasi, status, bau, rasa, warna, deskripsi')
             .eq('id', notif.report_id)
             .single();
-          
+
           reportData = report;
         }
-        
+
         enrichedNotifications.push({
           ...notif,
           users: userData,
           reports: reportData
         });
       }
-      
-      processNotifications(enrichedNotifications);
-      
+
+      // Merge with extra notifications
+      const allNotifications = [...extraNotifications, ...enrichedNotifications];
+
+      // Sort final result
+      allNotifications.sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      processNotifications(allNotifications);
+
     } catch (error) {
       console.error('Error enriching notifications:', error);
-      processNotifications(notificationsData);
+      processNotifications([...extraNotifications, ...notificationsData]);
     }
   };
 
   // Process dan hitung statistik
   const processNotifications = (data: Notification[]) => {
     setNotifications(data);
-    
+
     // Hitung statistik
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    const todayCount = data.filter(n => 
+
+    const todayCount = data.filter(n =>
       new Date(n.created_at) >= todayStart
     ).length;
 
@@ -219,7 +316,7 @@ export default function PuskesmasNotifikasiPage() {
       urgent: urgentCount,
       read: data.length - unreadCount
     });
-    
+
     console.log('📊 Statistik diperbarui:', {
       total: data.length,
       unread: unreadCount,
@@ -230,7 +327,7 @@ export default function PuskesmasNotifikasiPage() {
   // Buat mock data untuk testing
   const createMockNotifications = async (): Promise<Notification[]> => {
     console.log('🔄 Membuat mock notifications untuk testing...');
-    
+
     const mockNotifications: Notification[] = [
       {
         id: 'notif-001',
@@ -397,7 +494,7 @@ export default function PuskesmasNotifikasiPage() {
         }
       }
     ];
-    
+
     return mockNotifications;
   };
 
@@ -409,7 +506,7 @@ export default function PuskesmasNotifikasiPage() {
     }
 
     console.log('🔧 Setup realtime subscription...');
-    
+
     // Setup subscription untuk notifikasi baru
     const channel = supabase
       .channel('notifications-changes')
@@ -424,7 +521,7 @@ export default function PuskesmasNotifikasiPage() {
         (payload) => {
           console.log('📢 Real-time: Notifikasi baru diterima', payload.new);
           fetchNotifications();
-          
+
           // Tampilkan toast untuk notifikasi baru
           const newNotif = payload.new as Notification;
           if (!newNotif.is_read) {
@@ -462,7 +559,7 @@ export default function PuskesmasNotifikasiPage() {
   // Filter notifikasi
   useEffect(() => {
     let filtered = [...notifications];
-    
+
     switch (filterType) {
       case 'unread':
         filtered = filtered.filter(n => !n.is_read);
@@ -476,7 +573,7 @@ export default function PuskesmasNotifikasiPage() {
       default:
         break;
     }
-    
+
     if (searchTerm) {
       filtered = filtered.filter(n =>
         n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -485,13 +582,29 @@ export default function PuskesmasNotifikasiPage() {
         n.reports?.lokasi?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     setFilteredNotifications(filtered);
   }, [notifications, filterType, searchTerm]);
 
   // Mark as read
   const markAsRead = async (notificationId: string) => {
     try {
+      // Jika notifikasi virtual (dari report pending), jangan update ke DB
+      if (notificationId.startsWith('virtual-')) {
+        setNotifications(prev =>
+          prev.map(n =>
+            n.id === notificationId ? { ...n, is_read: true } : n
+          )
+        );
+        // Update stats
+        setStats(prev => ({
+          ...prev,
+          unread: Math.max(0, prev.unread - 1),
+          read: prev.read + 1
+        }));
+        return;
+      }
+
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
@@ -530,7 +643,7 @@ export default function PuskesmasNotifikasiPage() {
   const markAllAsRead = async () => {
     try {
       const unreadNotifications = notifications.filter(n => !n.is_read);
-      
+
       if (unreadNotifications.length === 0) {
         toast.success('Semua notifikasi sudah dibaca');
         return;
@@ -595,7 +708,7 @@ export default function PuskesmasNotifikasiPage() {
 
   const getNotificationColor = (type?: string, isRead?: boolean) => {
     const baseColor = isRead ? 'bg-white' : 'bg-blue-50';
-    
+
     switch (type) {
       case 'report_new':
         return `${baseColor} border-l-green-500`;
@@ -634,7 +747,7 @@ export default function PuskesmasNotifikasiPage() {
       if (diffMins < 60) return `${diffMins} menit yang lalu`;
       if (diffHours < 24) return `${diffHours} jam yang lalu`;
       if (diffDays < 7) return `${diffDays} hari yang lalu`;
-      
+
       return format(date, 'dd MMM yyyy HH:mm', { locale: id });
     } catch {
       return 'Tanggal tidak valid';
@@ -647,11 +760,11 @@ export default function PuskesmasNotifikasiPage() {
 
   const viewNotificationDetail = (notification: Notification) => {
     setSelectedNotification(notification);
-    
+
     if (!notification.is_read) {
       markAsRead(notification.id);
     }
-    
+
     setShowDetailModal(true);
   };
 
@@ -720,7 +833,7 @@ export default function PuskesmasNotifikasiPage() {
                 <span>📢 Sistem notifikasi real-time untuk puskesmas</span>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleRefresh}
@@ -739,7 +852,7 @@ export default function PuskesmasNotifikasiPage() {
                 Tandai Semua Dibaca
               </button>
               <Link
-                href="/puskesmas/laporan"
+                href="/laporanwarga"
                 className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
               >
                 <Eye className="w-4 h-4" />
@@ -760,7 +873,7 @@ export default function PuskesmasNotifikasiPage() {
               <Bell className="w-8 h-8 text-blue-400" />
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl shadow-lg p-5 border-l-4 border-yellow-500">
             <div className="flex items-center justify-between">
               <div>
@@ -770,7 +883,7 @@ export default function PuskesmasNotifikasiPage() {
               <AlertCircle className="w-8 h-8 text-yellow-400" />
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl shadow-lg p-5 border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
@@ -780,7 +893,7 @@ export default function PuskesmasNotifikasiPage() {
               <Calendar className="w-8 h-8 text-green-400" />
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl shadow-lg p-5 border-l-4 border-purple-500">
             <div className="flex items-center justify-between">
               <div>
@@ -790,7 +903,7 @@ export default function PuskesmasNotifikasiPage() {
               <FileText className="w-8 h-8 text-purple-400" />
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl shadow-lg p-5 border-l-4 border-red-500">
             <div className="flex items-center justify-between">
               <div>
@@ -800,7 +913,7 @@ export default function PuskesmasNotifikasiPage() {
               <AlertTriangle className="w-8 h-8 text-red-400" />
             </div>
           </div>
-          
+
           <div className="bg-white rounded-xl shadow-lg p-5 border-l-4 border-gray-500">
             <div className="flex items-center justify-between">
               <div>
@@ -825,7 +938,7 @@ export default function PuskesmasNotifikasiPage() {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base"
               />
             </div>
-            
+
             <div className="flex gap-3">
               <select
                 value={filterType}
@@ -837,8 +950,8 @@ export default function PuskesmasNotifikasiPage() {
                 <option value="report">Laporan dari Warga</option>
                 <option value="urgent">Darurat & Penting</option>
               </select>
-              
-              <button 
+
+              <button
                 onClick={() => {
                   setSearchTerm('');
                   setFilterType('all');
@@ -850,7 +963,7 @@ export default function PuskesmasNotifikasiPage() {
               </button>
             </div>
           </div>
-          
+
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
             <div>
               <span className="font-medium">{filteredNotifications.length}</span> dari{' '}
@@ -893,7 +1006,7 @@ export default function PuskesmasNotifikasiPage() {
                   Tampilkan Semua
                 </button>
                 <Link
-                  href="/puskesmas/laporan"
+                  href="/laporanwarga"
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <Eye className="w-5 h-5" />
@@ -914,23 +1027,22 @@ export default function PuskesmasNotifikasiPage() {
                         <div className="mt-1">
                           {getNotificationIcon(notification.type)}
                         </div>
-                        
+
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-3 mb-2">
                             <h3 className="font-semibold text-gray-800 text-lg">
                               {notification.title}
                             </h3>
-                            
+
                             <div className="flex items-center gap-2">
-                              <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                                notification.type === 'report_new' ? 'bg-green-100 text-green-800' :
+                              <span className={`px-2 py-1 rounded-lg text-xs font-medium ${notification.type === 'report_new' ? 'bg-green-100 text-green-800' :
                                 notification.type === 'urgent' ? 'bg-red-100 text-red-800' :
-                                notification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
+                                  notification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-blue-100 text-blue-800'
+                                }`}>
                                 {getTypeLabel(notification.type)}
                               </span>
-                              
+
                               {!notification.is_read && (
                                 <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium">
                                   Baru
@@ -938,13 +1050,13 @@ export default function PuskesmasNotifikasiPage() {
                               )}
                             </div>
                           </div>
-                          
+
                           <div className="mb-4">
                             <p className="text-gray-700 whitespace-pre-line">
                               {notification.message}
                             </p>
                           </div>
-                          
+
                           {/* Additional Info */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                             <div className="space-y-2">
@@ -957,7 +1069,7 @@ export default function PuskesmasNotifikasiPage() {
                                   </span>
                                 </div>
                               )}
-                              
+
                               {notification.reports?.lokasi && (
                                 <div className="flex items-center gap-2">
                                   <MapPin className="w-4 h-4 text-gray-400" />
@@ -968,7 +1080,7 @@ export default function PuskesmasNotifikasiPage() {
                                 </div>
                               )}
                             </div>
-                            
+
                             <div className="space-y-2">
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-4 h-4 text-gray-400" />
@@ -976,7 +1088,7 @@ export default function PuskesmasNotifikasiPage() {
                                   {formatDate(notification.created_at)}
                                 </span>
                               </div>
-                              
+
                               {notification.report_id && (
                                 <div className="flex items-center gap-2">
                                   <FileText className="w-4 h-4 text-gray-400" />
@@ -989,21 +1101,21 @@ export default function PuskesmasNotifikasiPage() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Action Buttons */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-100">
                         <div className="flex items-center gap-2">
                           {notification.report_id && (
                             <Link
-                              href={`/puskesmas/laporan/${notification.report_id}`}
+                              href={`/laporanwarga?id=${notification.report_id}`}
                               className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
                             >
                               <Eye className="w-4 h-4" />
-                              Lihat Detail Laporan
+                              Lihat
                             </Link>
                           )}
                         </div>
-                        
+
                         <div className="flex items-center gap-2">
                           {!notification.is_read && (
                             <button
@@ -1014,7 +1126,7 @@ export default function PuskesmasNotifikasiPage() {
                               Tandai Dibaca
                             </button>
                           )}
-                          
+
                           <button
                             onClick={() => viewNotificationDetail(notification)}
                             className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
@@ -1061,16 +1173,15 @@ export default function PuskesmasNotifikasiPage() {
                       <h4 className="text-lg font-semibold text-gray-800">
                         {selectedNotification.title}
                       </h4>
-                      <span className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        selectedNotification.type === 'report_new' ? 'bg-green-100 text-green-800' :
+                      <span className={`px-3 py-1 rounded-lg text-sm font-medium ${selectedNotification.type === 'report_new' ? 'bg-green-100 text-green-800' :
                         selectedNotification.type === 'urgent' ? 'bg-red-100 text-red-800' :
-                        selectedNotification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-blue-100 text-blue-800'
-                      }`}>
+                          selectedNotification.type === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-blue-100 text-blue-800'
+                        }`}>
                         {getTypeLabel(selectedNotification.type)}
                       </span>
                     </div>
-                    
+
                     <div className={`p-4 rounded-lg bg-white ${!selectedNotification.is_read ? 'border-l-4 border-blue-500' : ''}`}>
                       <p className="text-gray-700 whitespace-pre-line">
                         {selectedNotification.message}
@@ -1165,7 +1276,7 @@ export default function PuskesmasNotifikasiPage() {
                         <button
                           onClick={() => {
                             markAsRead(selectedNotification.id);
-                            setSelectedNotification({...selectedNotification, is_read: true});
+                            setSelectedNotification({ ...selectedNotification, is_read: true });
                           }}
                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                         >
@@ -1174,11 +1285,11 @@ export default function PuskesmasNotifikasiPage() {
                         </button>
                       )}
                     </div>
-                    
+
                     <div className="flex gap-3">
                       {selectedNotification.report_id && (
                         <Link
-                          href={`/puskesmas/laporan/${selectedNotification.report_id}`}
+                          href={`/laporanwarga?id=${selectedNotification.report_id}`}
                           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                         >
                           <Eye className="w-4 h-4" />
@@ -1218,7 +1329,7 @@ export default function PuskesmasNotifikasiPage() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                   <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -1230,7 +1341,7 @@ export default function PuskesmasNotifikasiPage() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                   <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
@@ -1242,7 +1353,7 @@ export default function PuskesmasNotifikasiPage() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                   <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
@@ -1256,7 +1367,7 @@ export default function PuskesmasNotifikasiPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-2xl shadow-lg p-6 border border-gray-200">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -1273,7 +1384,7 @@ export default function PuskesmasNotifikasiPage() {
                   <div className="text-sm text-gray-600 mt-1">Hari Ini</div>
                 </div>
               </div>
-              
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200">
                   <span className="text-gray-700">Kecamatan</span>
@@ -1291,11 +1402,11 @@ export default function PuskesmasNotifikasiPage() {
                   </span>
                 </div>
               </div>
-              
+
               <div className="pt-4 border-t border-gray-200">
                 <p className="text-sm text-gray-500">
-                  Sistem diperbarui: {new Date().toLocaleTimeString('id-ID', { 
-                    hour: '2-digit', 
+                  Sistem diperbarui: {new Date().toLocaleTimeString('id-ID', {
+                    hour: '2-digit',
                     minute: '2-digit'
                   })}
                 </p>

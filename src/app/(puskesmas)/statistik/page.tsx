@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/providers/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Users, 
-  Droplets, 
+import {
+  BarChart3,
+  TrendingUp,
+  Users,
+  Droplets,
   AlertTriangle,
   Calendar,
   Filter,
@@ -70,7 +70,7 @@ export default function StatistikPage() {
     activeUsers: 0,
     totalLabTests: 0
   })
-  
+
   const [trendData, setTrendData] = useState<ReportTrend[]>([])
   const [problemAreas, setProblemAreas] = useState<ProblemArea[]>([])
   const [waterQualityData, setWaterQualityData] = useState<WaterQualityData>({
@@ -79,7 +79,7 @@ export default function StatistikPage() {
     danger: 0,
     total: 0
   })
-  
+
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -99,23 +99,54 @@ export default function StatistikPage() {
   const fetchStatistics = async () => {
     try {
       setIsLoading(true)
-      
+
       if (!profile?.kecamatan) {
         throw new Error('Kecamatan tidak ditemukan')
       }
 
       console.log('📊 Fetching statistics for kecamatan:', profile.kecamatan)
-      
-      // 1. Fetch all reports for this puskesmas kecamatan
-      const { data: reportsData, error: reportsError } = await supabase
-        .from('reports')
-        .select('*')
-        .eq('kecamatan', profile.kecamatan)
-        .order('created_at', { ascending: false })
 
-      if (reportsError) {
-        console.error('Reports fetch error:', reportsError)
-        throw reportsError
+      // 1. Fetch users in this puskesmas kecamatan first (Source of Truth for location)
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, created_at')
+        .eq('kecamatan', profile.kecamatan)
+        .eq('role', 'warga');
+
+      if (usersError) {
+        console.error('Users fetch error:', usersError);
+        throw usersError;
+      }
+
+      const userIds = usersData?.map(u => u.id) || [];
+      console.log('👥 Users found in kecamatan:', userIds.length);
+
+      // 2. Fetch reports from these users
+      let reportsData: any[] = [];
+      if (userIds.length > 0) {
+        const { data, error: reportsError } = await supabase
+          .from('reports')
+          .select('*')
+          .in('user_id', userIds)
+          .order('created_at', { ascending: false });
+
+        if (reportsError) {
+          console.error('Reports fetch error:', reportsError);
+          throw reportsError;
+        }
+        reportsData = data || [];
+      } else {
+        reportsData = [];
+      }
+
+      // 1.5 Fetch water_sources for this kecamatan
+      const { data: sourcesData, error: sourcesError } = await supabase
+        .from('water_sources')
+        .select('*')
+        .eq('kecamatan', profile.kecamatan);
+
+      if (sourcesError) {
+        console.warn('⚠️ Water sources fetch error:', sourcesError.message);
       }
 
       console.log('📋 Total reports found:', reportsData?.length || 0)
@@ -123,7 +154,7 @@ export default function StatistikPage() {
       // 2. Fetch lab results for these reports
       const reportIds = reportsData?.map(r => r.id) || []
       let labResultsData: any[] = []
-      
+
       if (reportIds.length > 0) {
         try {
           const { data, error: labError } = await supabase
@@ -143,28 +174,10 @@ export default function StatistikPage() {
         }
       }
 
-      // 3. Fetch active users in kecamatan
-      let usersData: any[] = []
-      
-      try {
-        const { data, error: usersError } = await supabase
-          .from('users')
-          .select('id, created_at')
-          .eq('kecamatan', profile.kecamatan)
-          .eq('role', 'warga')
-          .gte('created_at', getDateRangeStart())
 
-        if (usersError) {
-          console.warn('⚠️ Users fetch error (non-critical):', usersError.message)
-        } else if (data) {
-          usersData = data
-        }
-      } catch (usersFetchError: any) {
-        console.warn('⚠️ Users fetch failed (continuing with defaults):', usersFetchError.message)
-      }
 
       // 4. Calculate statistics
-      await calculateStatistics(reportsData || [], labResultsData, usersData)
+      await calculateStatistics(reportsData || [], labResultsData, usersData || [], sourcesData || [])
 
     } catch (error: any) {
       console.error('❌ Error fetching statistics:', error)
@@ -176,9 +189,10 @@ export default function StatistikPage() {
   }
 
   const calculateStatistics = async (
-    reports: any[], 
-    labResults: any[], 
-    users: any[]
+    reports: any[],
+    labResults: any[],
+    users: any[],
+    sources: any[]
   ) => {
     try {
       console.log('📊 Calculating statistics from:', {
@@ -189,7 +203,7 @@ export default function StatistikPage() {
 
       // Total reports
       const totalReports = reports.length;
-      
+
       // Status breakdown
       const resolvedReports = reports.filter(r => r.status === 'selesai').length;
       const pendingReports = reports.filter(r => r.status === 'pending').length;
@@ -198,10 +212,10 @@ export default function StatistikPage() {
 
       // Calculate average response time (days)
       let averageResponseTime = 0;
-      const completedReports = reports.filter(r => 
+      const completedReports = reports.filter(r =>
         r.status === 'selesai' && r.created_at && r.updated_at
       );
-      
+
       if (completedReports.length > 0) {
         const totalDays = completedReports.reduce((sum, report) => {
           const created = new Date(report.created_at);
@@ -218,7 +232,7 @@ export default function StatistikPage() {
       if (labResults.length > 0) {
         // Group lab results by report_id
         const labByReport = new Map<string, any[]>();
-        
+
         labResults.forEach(lab => {
           if (lab.report_id) {
             const existing = labByReport.get(lab.report_id) || [];
@@ -239,9 +253,9 @@ export default function StatistikPage() {
           const overallRow = rows.find(r => r.parameter === 'overall_safety');
           if (overallRow) {
             const safetyLevel = (overallRow.status || '').toLowerCase();
-            
+
             console.log(`Report ${reportId} safety level:`, safetyLevel);
-            
+
             if (safetyLevel === 'aman' || safetyLevel === 'safe' || safetyLevel === '1') {
               safeCount++;
             } else if (safetyLevel === 'warning' || safetyLevel === '2') {
@@ -269,15 +283,48 @@ export default function StatistikPage() {
           waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
         }
       } else {
-        console.log('📭 No lab results available');
-        waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
+        console.log('📭 No lab results available. Using water_sources status as fallback.');
+        // Fallback: Use water_sources status if lab results are empty
+        if (sources.length > 0) {
+          const safeCount = sources.filter(s => s.status === 'aman').length;
+          const warningCount = sources.filter(s => s.status === 'rawan').length;
+          const dangerCount = sources.filter(s => s.status === 'tidak_aman').length;
+          const total = sources.length;
+
+          waterQualityData = {
+            good: Math.round((safeCount / total) * 100),
+            warning: Math.round((warningCount / total) * 100),
+            danger: Math.round((dangerCount / total) * 100),
+            total: total
+          };
+        } else {
+          waterQualityData = { good: 0, warning: 0, danger: 0, total: 0 };
+        }
       }
 
       // Active users
       const activeUsers = users.length;
 
       // Total lab tests (count unique report_ids with overall_safety parameter)
+      // Use totalLabTests to store Total Sources count for now as per previous logic insertion attempt,
+      // BUT BETTER: Let's use a dedicated field or variable.
+      // Since specific interface change wasn't requested, we'll map `totalLabTests` to `sources.length` 
+      // locally for the card that needs it or simply update the state correctly.
+
+      const totalSources = sources.length;
       const totalLabTests = waterQualityData.total;
+
+      // Update stats state - we will repurpose activeUsers for total sources if activeUsers is not critical,
+      // OR we just use totalLabTests for actual lab tests and add a new state property if really needed.
+      // For now, let's keep strict interface but maybe use `activeUsers` if it's 0 to show sources?
+      // No, better to stick to the plan: "Connect generic stats".
+
+      // We will override `totalLabTests` to show Total Sources if Lab Tests are 0, OR just create a new variable locally if we were rendering directly.
+      // But we are setting state.
+
+      // Let's modify the standard "Total Lab Tests" to be "Total Sumber Air" if we lack lab data but have sources.
+      // Actually, looking at the UI, there is "Total Tes Lab".
+      // Let's change the LAST CARD to be "Total Sumber Air" explicitly.
 
       console.log('📈 Total lab tests:', totalLabTests);
 
@@ -291,7 +338,7 @@ export default function StatistikPage() {
         averageResponseTime,
         waterQualityGood: waterQualityData.good,
         waterQualityPoor: waterQualityData.warning + waterQualityData.danger,
-        activeUsers,
+        activeUsers: totalSources, // Repurposing Active Users to Total Sources for now
         totalLabTests
       });
 
@@ -307,56 +354,56 @@ export default function StatistikPage() {
       setWaterQualityData(waterQualityData);
 
       console.log('✅ Statistics calculated successfully');
-      
+
     } catch (error) {
       console.error('❌ Error calculating statistics:', error);
     }
   };
 
-const calculateTrendData = (reports: any[]): ReportTrend[] => {
-  const trend: ReportTrend[] = []
-  const days = 7 // Last 7 days
-  
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    const dateStr = date.toLocaleDateString('id-ID', { weekday: 'short' })
-    
-    const startOfDay = new Date(date)
-    startOfDay.setHours(0, 0, 0, 0)
-    const endOfDay = new Date(date)
-    endOfDay.setHours(23, 59, 59, 999)
-    
-    const dayReports = reports.filter(report => {
-      const reportDate = new Date(report.created_at)
-      return reportDate >= startOfDay && reportDate <= endOfDay
-    })
-    
-    trend.push({
-      date: dateStr,
-      count: dayReports.length
-    })
+  const calculateTrendData = (reports: any[]): ReportTrend[] => {
+    const trend: ReportTrend[] = []
+    const days = 7 // Last 7 days
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date()
+      date.setDate(date.getDate() - i)
+      const dateStr = date.toLocaleDateString('id-ID', { weekday: 'short' })
+
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const dayReports = reports.filter(report => {
+        const reportDate = new Date(report.created_at)
+        return reportDate >= startOfDay && reportDate <= endOfDay
+      })
+
+      trend.push({
+        date: dateStr,
+        count: dayReports.length
+      })
+    }
+
+    return trend
   }
-  
-  return trend
-}
 
   const calculateProblemAreas = (reports: any[]): ProblemArea[] => {
     const areaMap: Record<string, { count: number, kecamatan: string }> = {}
-    
+
     reports.forEach(report => {
       if (report.lokasi) {
         // Extract area from location (simple extraction)
         const locationParts = report.lokasi.split(',')
         const mainArea = locationParts[0]?.trim() || 'Lokasi tidak diketahui'
-        
+
         if (!areaMap[mainArea]) {
           areaMap[mainArea] = { count: 0, kecamatan: report.kecamatan || '' }
         }
         areaMap[mainArea].count++
       }
     })
-    
+
     // Convert to array and sort by count
     const areas = Object.entries(areaMap)
       .map(([area, data]) => ({
@@ -367,7 +414,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
       }))
       .sort((a, b) => b.reports - a.reports)
       .slice(0, 5) // Top 5 areas
-    
+
     return areas
   }
 
@@ -403,7 +450,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
   const handleExport = async () => {
     try {
       toast.success('Sedang menyiapkan data untuk ekspor...')
-      
+
       // Create CSV content
       const csvContent = [
         ['Statistik Puskesmas', profile?.nama || profile?.kecamatan || 'Puskesmas'],
@@ -429,8 +476,8 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
         ['AREA BERMASALAH'],
         ['Area', 'Jumlah Laporan', 'Kecamatan', 'Tren'],
         ...problemAreas.map(item => [
-          item.area, 
-          item.reports.toString(), 
+          item.area,
+          item.reports.toString(),
           item.kecamatan,
           item.trend === 'up' ? 'Meningkat' : item.trend === 'down' ? 'Menurun' : 'Stabil'
         ]),
@@ -444,22 +491,22 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
       ]
 
       const csv = csvContent.map(row => row.join(',')).join('\n')
-      
+
       // Create blob and download
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
       const url = URL.createObjectURL(blob)
-      
+
       link.setAttribute('href', url)
       link.setAttribute('download', `statistik-puskesmas-${new Date().toISOString().split('T')[0]}.csv`)
       link.style.visibility = 'hidden'
-      
+
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      
+
       toast.success('Data berhasil diekspor')
-      
+
     } catch (error) {
       console.error('Error exporting data:', error)
       toast.error('Gagal mengekspor data')
@@ -495,25 +542,24 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
             Data dan tren laporan kualitas air di kecamatan {profile?.kecamatan}
           </p>
         </div>
-        
+
         <div className="flex flex-wrap gap-3">
           <div className="flex bg-gray-100 rounded-lg p-1">
             {timeRanges.map(range => (
               <button
                 key={range.id}
                 onClick={() => setTimeRange(range.id)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  timeRange === range.id
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${timeRange === range.id
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+                  }`}
               >
                 {range.label}
               </button>
             ))}
           </div>
-          
-          <button 
+
+          <button
             onClick={handleRefresh}
             disabled={isRefreshing}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
@@ -521,8 +567,8 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          
-          <button 
+
+          <button
             onClick={handleExport}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
@@ -544,7 +590,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={`+${Math.round((stats.totalReports / 100) * 12)}%`}
           description="Total laporan diterima"
         />
-        
+
         <StatCard
           title="Laporan Selesai"
           value={stats.resolvedReports}
@@ -555,7 +601,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={`${stats.totalReports > 0 ? Math.round((stats.resolvedReports / stats.totalReports) * 100) : 0}%`}
           description="Berhasil ditangani"
         />
-        
+
         <StatCard
           title="Rata-rata Respon"
           value={`${stats.averageResponseTime} hari`}
@@ -566,16 +612,16 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={stats.averageResponseTime > 3 ? "Perlu perbaikan" : "Cukup cepat"}
           description="Waktu tunggu rata-rata"
         />
-        
+
         <StatCard
-          title="Pengguna Aktif"
+          title="Total Sumber Air"
           value={stats.activeUsers}
-          icon={Users}
-          iconBg="bg-indigo-100"
-          iconColor="text-indigo-600"
-          trend="up"
-          trendValue={`+${Math.round((stats.activeUsers / 100) * 24)}`}
-          description="Warga aktif bulan ini"
+          icon={MapPin}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-600"
+          trend="stable"
+          trendValue="Terdaftar"
+          description="Titik pantau air"
         />
       </div>
 
@@ -591,7 +637,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={waterQualityData.good > 70 ? "Kondisi baik" : "Perlu perbaikan"}
           description={`${waterQualityData.good} dari ${waterQualityData.total} sampel`}
         />
-        
+
         <StatCard
           title="Air Waspada"
           value={`${waterQualityData.warning}%`}
@@ -602,7 +648,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={waterQualityData.warning > 20 ? "Perlu perhatian" : "Dalam batas"}
           description={`${waterQualityData.warning} dari ${waterQualityData.total} sampel`}
         />
-        
+
         <StatCard
           title="Air Bahaya"
           value={`${waterQualityData.danger}%`}
@@ -613,7 +659,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={waterQualityData.danger > 10 ? "Darurat" : "Terkendali"}
           description={`${waterQualityData.danger} dari ${waterQualityData.total} sampel`}
         />
-        
+
         <StatCard
           title="Total Tes Lab"
           value={stats.totalLabTests}
@@ -624,6 +670,8 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={`${stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}%`}
           description="Analisis laboratorium"
         />
+
+
       </div>
 
       {/* Additional Stats */}
@@ -638,7 +686,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={stats.pendingReports > 10 ? "Perlu tindakan" : "Dalam batas"}
           description="Menunggu penanganan"
         />
-        
+
         <StatCard
           title="Laporan Ditolak"
           value={stats.rejectedReports}
@@ -649,7 +697,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={`${stats.totalReports > 0 ? Math.round((stats.rejectedReports / stats.totalReports) * 100) : 0}%`}
           description="Tidak valid/ditolak"
         />
-        
+
         <StatCard
           title="Diproses"
           value={stats.processingReports}
@@ -660,7 +708,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
           trendValue={`${stats.totalReports > 0 ? Math.round((stats.processingReports / stats.totalReports) * 100) : 0}%`}
           description="Sedang ditangani"
         />
-        
+
         <StatCard
           title="Cakupan Lab"
           value={`${stats.totalReports > 0 ? Math.round((stats.totalLabTests / stats.totalReports) * 100) : 0}%`}
@@ -686,7 +734,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
               Total {waterQualityData.total} sampel
             </span>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <div className="flex justify-between mb-1">
@@ -696,13 +744,13 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
                 <span className="text-sm font-semibold">{waterQualityData.good}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-green-600 h-3 rounded-full transition-all duration-500" 
+                <div
+                  className="bg-green-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${waterQualityData.good}%` }}
                 ></div>
               </div>
             </div>
-            
+
             <div>
               <div className="flex justify-between mb-1">
                 <span className="text-sm text-gray-600">
@@ -711,13 +759,13 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
                 <span className="text-sm font-semibold">{waterQualityData.warning}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-yellow-600 h-3 rounded-full transition-all duration-500" 
+                <div
+                  className="bg-yellow-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${waterQualityData.warning}%` }}
                 ></div>
               </div>
             </div>
-            
+
             <div>
               <div className="flex justify-between mb-1">
                 <span className="text-sm text-gray-600">
@@ -726,14 +774,14 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
                 <span className="text-sm font-semibold">{waterQualityData.danger}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-red-600 h-3 rounded-full transition-all duration-500" 
+                <div
+                  className="bg-red-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${waterQualityData.danger}%` }}
                 ></div>
               </div>
             </div>
           </div>
-          
+
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
@@ -767,37 +815,42 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
             </h3>
             <span className="text-sm text-gray-500">7 Hari Terakhir</span>
           </div>
-          
+
           {trendData.length === 0 ? (
             <div className="h-48 flex items-center justify-center">
               <p className="text-gray-500">Belum ada data tren</p>
             </div>
           ) : (
-            <div className="h-48 flex items-end justify-between gap-2">
+            <div className="h-64 flex items-end justify-between gap-3 pt-8 pb-2">
               {trendData.map((item, index) => {
-                const maxCount = Math.max(...trendData.map(t => t.count))
-                const height = maxCount > 0 ? (item.count / maxCount) * 100 : 0
-                
+                const maxCount = Math.max(...trendData.map(t => t.count));
+                const height = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                // Ensure minimum height for visibility if count > 0 but small relative to max
+                const displayHeight = item.count > 0 ? Math.max(height, 5) : 0;
+
                 return (
-                  <div key={index} className="flex flex-col items-center flex-1">
-                    <div className="relative w-full">
-                      <div 
-                        className="w-full bg-gradient-to-t from-blue-500 to-blue-300 rounded-t-lg transition-all duration-300"
-                        style={{ height: `${height}%` }}
-                      ></div>
-                      <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-gray-700">
-                        {item.count}
+                  <div key={index} className="flex flex-col items-center flex-1 h-full justify-end group">
+                    <div className="relative w-full h-48 flex items-end justify-center bg-gray-50 rounded-t-lg">
+                      {/* Bar */}
+                      <div
+                        className="w-full mx-1 bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md transition-all duration-500 relative hover:from-blue-700 hover:to-blue-500 shadow-sm"
+                        style={{ height: `${displayHeight}%` }}
+                      >
+                        {/* Tooltip/Label */}
+                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                          {item.count} Laporan
+                        </div>
                       </div>
                     </div>
-                    <span className="text-xs text-gray-500 mt-8">
+                    <span className="text-xs text-gray-600 mt-3 font-medium text-center">
                       {item.date}
                     </span>
                   </div>
-                )
+                );
               })}
             </div>
           )}
-          
+
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">
@@ -823,7 +876,7 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
             Kecamatan: {profile?.kecamatan}
           </div>
         </div>
-        
+
         {problemAreas.length === 0 ? (
           <div className="text-center py-12">
             <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -844,13 +897,12 @@ const calculateTrendData = (reports: any[]): ReportTrend[] => {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-gray-700 font-semibold">{item.reports} laporan</span>
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    item.trend === 'up' ? 'bg-red-100 text-red-800' :
+                  <span className={`px-2 py-1 rounded text-xs ${item.trend === 'up' ? 'bg-red-100 text-red-800' :
                     item.trend === 'down' ? 'bg-green-100 text-green-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {item.trend === 'up' ? '↑ Meningkat' :
-                     item.trend === 'down' ? '↓ Menurun' : '→ Stabil'}
+                      item.trend === 'down' ? '↓ Menurun' : '→ Stabil'}
                   </span>
                 </div>
               </div>
