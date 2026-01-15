@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import {
@@ -99,38 +100,52 @@ export default function PuskesmasLaporanPage() {
     fetchReports();
   }, [user, profile, authLoading]);
 
-const fetchReports = async () => {
+  // Deep linking handling
+  const searchParams = useSearchParams();
+  const reportIdParam = searchParams.get('id');
+
+  useEffect(() => {
+    if (reportIdParam && reports.length > 0) {
+      const targetReport = reports.find(r => r.id === reportIdParam);
+      if (targetReport) {
+        setSelectedReport(targetReport);
+        setShowModal(true);
+      }
+    }
+  }, [reportIdParam, reports]);
+
+  const fetchReports = async () => {
     try {
       setIsLoading(true);
       setIsRefreshing(true);
-      
+
       console.log('🔍 Mengambil data laporan untuk puskesmas...');
-      
+
       const kecamatan = profile?.kecamatan;
-      
+
       if (!kecamatan) {
         console.error('Kecamatan puskesmas tidak ditemukan');
         toast.error('Data puskesmas tidak lengkap');
         return;
       }
-      
+
       console.log('📍 Kecamatan puskesmas:', kecamatan);
-      
+
       // STEP 1: Ambil semua warga di kecamatan ini
       const { data: wargaData, error: wargaError } = await supabase
         .from('users')
         .select('id')
         .eq('role', 'warga')
         .eq('kecamatan', kecamatan);
-      
+
       if (wargaError) {
         console.error('❌ Error mengambil warga:', wargaError);
         throw wargaError;
       }
-      
+
       const wargaIds = wargaData?.map(w => w.id) || [];
       console.log(`👥 Ditemukan ${wargaIds.length} warga di kecamatan ${kecamatan}`);
-      
+
       if (wargaIds.length === 0) {
         console.log('📭 Tidak ada warga di kecamatan ini');
         setReports([]);
@@ -138,7 +153,7 @@ const fetchReports = async () => {
         toast.success('Belum ada warga terdaftar di kecamatan ini');
         return;
       }
-      
+
       // STEP 2: Ambil laporan dari warga-warga tersebut
       const { data: reportsData, error: reportsError } = await supabase
         .from('reports')
@@ -154,14 +169,14 @@ const fetchReports = async () => {
         `)
         .in('user_id', wargaIds)
         .order('created_at', { ascending: false });
-      
+
       if (reportsError) {
         console.error('❌ Error mengambil laporan:', reportsError);
         throw reportsError;
       }
-      
+
       console.log(`📄 Ditemukan ${reportsData?.length || 0} laporan dari warga kecamatan ${kecamatan}`);
-      
+
       // STEP 3: Format data
       const reportsWithUsers: Report[] = (reportsData || []).map(report => ({
         id: report.id,
@@ -197,16 +212,13 @@ const fetchReports = async () => {
           kecamatan: kecamatan
         }
       }));
-      
+
       setReports(reportsWithUsers);
       updateStats(reportsWithUsers);
-      
+
       console.log('✅ Data laporan berhasil diambil');
-      toast.success(`${reportsWithUsers.length} laporan ditemukan`, {
-        icon: '📊',
-        duration: 3000
-      });
-      
+
+
     } catch (err: any) {
       console.error('❌ Error mengambil laporan:', err);
       toast.error('Gagal memuat data laporan: ' + err.message, {
@@ -222,17 +234,17 @@ const fetchReports = async () => {
   const updateStats = (reportsList: Report[]) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    const reportsThisMonth = reportsList.filter(report => 
+
+    const reportsThisMonth = reportsList.filter(report =>
       new Date(report.created_at) >= startOfMonth
     );
-    
-    const bermasalahReports = reportsList.filter(report => 
-      report.bau !== 'tidak_berbau' || 
-      report.rasa !== 'normal' || 
+
+    const bermasalahReports = reportsList.filter(report =>
+      report.bau !== 'tidak_berbau' ||
+      report.rasa !== 'normal' ||
       report.warna !== 'jernih'
     );
-    
+
     setStats({
       total: reportsList.length,
       pending: reportsList.filter(r => r.status === 'pending').length,
@@ -244,8 +256,9 @@ const fetchReports = async () => {
     });
   };
 
-  const handleRefresh = () => {
-    fetchReports();
+  const handleRefresh = async () => {
+    await fetchReports();
+    toast.success('Data diperbarui');
   };
 
   const getStatusIcon = (status: string) => {
@@ -280,7 +293,7 @@ const fetchReports = async () => {
 
   const getConditionIcon = (type: string, value: string) => {
     const isProblem = ['berbau_besi', 'berbau_busuk', 'berbau_kaporit', 'tidak_normal', 'pahit', 'asin', 'keruh', 'kecoklatan', 'kehijauan', 'panas'].includes(value);
-    
+
     switch (type) {
       case 'bau':
         return isProblem ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Droplets className="w-4 h-4 text-green-500" />;
@@ -316,7 +329,7 @@ const fetchReports = async () => {
         'kehijauan': 'Kehijauan'
       }
     };
-    
+
     return texts[type]?.[value] || value.replace('_', ' ');
   };
 
@@ -331,23 +344,23 @@ const fetchReports = async () => {
 
   const filteredReports = reports.filter(report => {
     // Filter pencarian
-    const matchesSearch = 
+    const matchesSearch =
       (report.user?.nama || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.lokasi.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (report.deskripsi || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.bau.toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.rasa.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     // Filter status
-    const matchesStatus = 
+    const matchesStatus =
       filterStatus === 'all' || report.status === filterStatus;
-    
+
     // Filter kondisi air
-    const matchesCondition = 
+    const matchesCondition =
       (!filterCondition.bau || report.bau === filterCondition.bau) &&
       (!filterCondition.rasa || report.rasa === filterCondition.rasa) &&
       (!filterCondition.warna || report.warna === filterCondition.warna);
-    
+
     return matchesSearch && matchesStatus && matchesCondition;
   });
 
@@ -355,7 +368,7 @@ const fetchReports = async () => {
     try {
       const { error } = await supabase
         .from('reports')
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date().toISOString()
         })
@@ -364,12 +377,12 @@ const fetchReports = async () => {
       if (error) throw error;
 
       // Update local state
-      const updatedReports = reports.map(report => 
-        report.id === reportId 
+      const updatedReports = reports.map(report =>
+        report.id === reportId
           ? { ...report, status: newStatus as any, updated_at: new Date().toISOString() }
           : report
       );
-      
+
       setReports(updatedReports);
       updateStats(updatedReports);
 
@@ -401,10 +414,10 @@ const fetchReports = async () => {
 
     try {
       setIsUpdatingNote(true);
-      
+
       const { error } = await supabase
         .from('reports')
-        .update({ 
+        .update({
           catatan: modalNote,
           updated_at: new Date().toISOString()
         })
@@ -413,12 +426,12 @@ const fetchReports = async () => {
       if (error) throw error;
 
       // Update local state
-      const updatedReports = reports.map(report => 
-        report.id === reportId 
+      const updatedReports = reports.map(report =>
+        report.id === reportId
           ? { ...report, catatan: modalNote, updated_at: new Date().toISOString() }
           : report
       );
-      
+
       setReports(updatedReports);
 
       // Update selected report if open
@@ -429,9 +442,9 @@ const fetchReports = async () => {
       toast.success('Catatan berhasil ditambahkan', {
         icon: '💾'
       });
-      
+
       setModalNote('');
-      
+
     } catch (error: any) {
       console.error('❌ Error mengupdate catatan:', error);
       toast.error('Gagal menyimpan catatan', {
@@ -476,7 +489,7 @@ const fetchReports = async () => {
     link.href = URL.createObjectURL(blob);
     link.download = `laporan-puskesmas-${profile?.kecamatan || 'data'}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     link.click();
-    
+
     toast.success('Data berhasil diexport ke CSV', {
       icon: '📥'
     });
@@ -593,11 +606,11 @@ const fetchReports = async () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap items-center gap-2 mt-4 text-sm text-gray-500">
               <span className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                {new Date().toLocaleDateString('id-ID', { 
+                {new Date().toLocaleDateString('id-ID', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
@@ -607,9 +620,9 @@ const fetchReports = async () => {
               <span>•</span>
               <span className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
-                {new Date().toLocaleTimeString('id-ID', { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
+                {new Date().toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
+                  minute: '2-digit'
                 })}
               </span>
               <span>•</span>
@@ -618,7 +631,7 @@ const fetchReports = async () => {
               </span>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleRefresh}
@@ -743,7 +756,7 @@ const fetchReports = async () => {
                 className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base"
               />
             </div>
-            
+
             <div className="flex gap-3">
               <div className="relative">
                 <select
@@ -758,14 +771,14 @@ const fetchReports = async () => {
                   <option value="ditolak">Ditolak</option>
                 </select>
               </div>
-              
+
               <input
                 type="date"
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
                 className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
               />
-              
+
               <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 flex items-center gap-2 font-medium"
@@ -773,8 +786,8 @@ const fetchReports = async () => {
                 <Filter className="w-4 h-4" />
                 Filter Lanjutan
               </button>
-              
-              <button 
+
+              <button
                 onClick={clearAllFilters}
                 className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 flex items-center gap-2 font-medium"
               >
@@ -783,7 +796,7 @@ const fetchReports = async () => {
               </button>
             </div>
           </div>
-          
+
           {/* Advanced Filters */}
           {showAdvancedFilters && (
             <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
@@ -813,7 +826,7 @@ const fetchReports = async () => {
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Kondisi Rasa
@@ -830,7 +843,7 @@ const fetchReports = async () => {
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Kondisi Warna
@@ -850,7 +863,7 @@ const fetchReports = async () => {
               </div>
             </div>
           )}
-          
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <div className="text-sm text-gray-600">
               <span className="font-medium">{filteredReports.length}</span> laporan ditemukan
@@ -937,11 +950,10 @@ const fetchReports = async () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredReports.map((report) => (
-                  <tr 
-                    key={report.id} 
-                    className={`hover:bg-gray-50 transition-colors ${
-                      isWaterProblematic(report) ? 'bg-red-50/30 hover:bg-red-50/50' : ''
-                    }`}
+                  <tr
+                    key={report.id}
+                    className={`hover:bg-gray-50 transition-colors ${isWaterProblematic(report) ? 'bg-red-50/30 hover:bg-red-50/50' : ''
+                      }`}
                   >
                     <td className="py-4 px-6">
                       <div className="flex items-start gap-3">
@@ -985,7 +997,7 @@ const fetchReports = async () => {
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="grid grid-cols-3 gap-2">
                           <div className={`text-center p-2 rounded-lg border ${getConditionColor('bau', report.bau).includes('red') ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
                             <div className="text-xs text-gray-500 mb-1">Bau</div>
@@ -1006,7 +1018,7 @@ const fetchReports = async () => {
                             </div>
                           </div>
                         </div>
-                        
+
                         {report.deskripsi && (
                           <div className="text-sm text-gray-600 line-clamp-2">
                             "{report.deskripsi}"
@@ -1029,13 +1041,13 @@ const fetchReports = async () => {
                             <option value="ditolak">Ditolak</option>
                           </select>
                         </div>
-                        
+
                         {report.updated_at && (
                           <div className="text-xs text-gray-500">
                             Update: {format(new Date(report.updated_at), 'dd/MM HH:mm')}
                           </div>
                         )}
-                        
+
                         {report.catatan && (
                           <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-50 rounded-lg">
                             <div className="font-medium mb-1">Catatan:</div>
@@ -1066,13 +1078,13 @@ const fetchReports = async () => {
                           <Eye className="w-4 h-4" />
                           Detail
                         </button>
-                        
+
                         {isWaterProblematic(report) && (
                           <div className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-lg text-center border border-red-200">
                             ⚠️ Air Bermasalah
                           </div>
                         )}
-                        
+
                         {report.foto_url && (
                           <div className="text-xs text-gray-500 flex items-center justify-center gap-1">
                             <ImageIcon className="w-3 h-3" />
@@ -1099,7 +1111,7 @@ const fetchReports = async () => {
                   <span> untuk pencarian "<span className="font-medium">{searchQuery}</span>"</span>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-4">
                 <div className="text-sm text-gray-600">
                   <span className="font-medium">{stats.pending}</span> menunggu •{' '}
@@ -1137,7 +1149,7 @@ const fetchReports = async () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                 <Activity className="w-3 h-3 text-blue-600" />
@@ -1149,7 +1161,7 @@ const fetchReports = async () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                 <CheckCircle className="w-3 h-3 text-green-600" />
@@ -1161,7 +1173,7 @@ const fetchReports = async () => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-start gap-3">
               <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                 <AlertCircle className="w-3 h-3 text-red-600" />
@@ -1175,7 +1187,7 @@ const fetchReports = async () => {
             </div>
           </div>
         </div>
-        
+
         <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-2xl shadow-lg p-6 border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -1192,7 +1204,7 @@ const fetchReports = async () => {
                 <div className="text-sm text-gray-600 mt-1">Air Bermasalah</div>
               </div>
             </div>
-            
+
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200">
                 <span className="text-gray-700">Kecamatan</span>
@@ -1207,11 +1219,11 @@ const fetchReports = async () => {
                 <span className="font-medium text-green-600">{stats.bulanIni} laporan</span>
               </div>
             </div>
-            
+
             <div className="pt-4 border-t border-gray-200">
               <p className="text-sm text-gray-500">
-                Data terakhir diperbarui: {new Date().toLocaleTimeString('id-ID', { 
-                  hour: '2-digit', 
+                Data terakhir diperbarui: {new Date().toLocaleTimeString('id-ID', {
+                  hour: '2-digit',
                   minute: '2-digit',
                   second: '2-digit'
                 })}
@@ -1321,7 +1333,7 @@ const fetchReports = async () => {
                       <Thermometer className="w-6 h-6 text-blue-500 mx-auto" />
                     </div>
                   </div>
-                  
+
                   {selectedReport.deskripsi && (
                     <div>
                       <label className="text-sm text-gray-500 block mb-2">Deskripsi Tambahan</label>
@@ -1371,53 +1383,49 @@ const fetchReports = async () => {
                     <FileEdit className="w-5 h-5 text-blue-600" />
                     Status & Catatan
                   </h4>
-                  
+
                   <div className="mb-6">
                     <label className="text-sm text-gray-500 block mb-3">Ubah Status Laporan</label>
                     <div className="flex flex-wrap gap-3">
                       <button
                         onClick={() => handleStatusUpdate(selectedReport.id, 'pending')}
-                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${
-                          selectedReport.status === 'pending' 
-                            ? 'bg-yellow-100 text-yellow-800 border-yellow-300' 
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
                       >
                         Menunggu
                       </button>
                       <button
                         onClick={() => handleStatusUpdate(selectedReport.id, 'diproses')}
-                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${
-                          selectedReport.status === 'diproses' 
-                            ? 'bg-blue-100 text-blue-800 border-blue-300' 
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'diproses'
+                          ? 'bg-blue-100 text-blue-800 border-blue-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
                       >
                         Diproses
                       </button>
                       <button
                         onClick={() => handleStatusUpdate(selectedReport.id, 'selesai')}
-                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${
-                          selectedReport.status === 'selesai' 
-                            ? 'bg-green-100 text-green-800 border-green-300' 
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'selesai'
+                          ? 'bg-green-100 text-green-800 border-green-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
                       >
                         Selesai
                       </button>
                       <button
                         onClick={() => handleStatusUpdate(selectedReport.id, 'ditolak')}
-                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${
-                          selectedReport.status === 'ditolak' 
-                            ? 'bg-red-100 text-red-800 border-red-300' 
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'ditolak'
+                          ? 'bg-red-100 text-red-800 border-red-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
                       >
                         Ditolak
                       </button>
                     </div>
                   </div>
-                  
+
                   <div>
                     <label className="text-sm text-gray-500 block mb-3">Tambah/Edit Catatan</label>
                     <div className="space-y-3">
@@ -1437,7 +1445,7 @@ const fetchReports = async () => {
                           {isUpdatingNote ? 'Menyimpan...' : 'Simpan Catatan'}
                         </button>
                       </div>
-                      
+
                       {selectedReport.catatan && (
                         <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
                           <div className="text-sm text-gray-500 mb-2">Catatan Saat Ini:</div>
@@ -1477,22 +1485,13 @@ const fetchReports = async () => {
                   <p>Laporan ID: {selectedReport.id}</p>
                   <p className="mt-1">Dibuat: {format(new Date(selectedReport.created_at), 'dd/MM/yyyy HH:mm:ss')}</p>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => setShowModal(false)}
                     className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
                   >
                     Tutup
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowModal(false);
-                      window.open(`/puskesmas/laporan/${selectedReport.id}`, '_blank');
-                    }}
-                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-                  >
-                    Buka Halaman Detail
                   </button>
                 </div>
               </div>
