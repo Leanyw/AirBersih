@@ -362,7 +362,7 @@ export default function SumberAirPage() {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-b from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg"
           >
             <Plus className="w-4 h-4" />
             Tambah Sumber
@@ -421,7 +421,7 @@ export default function SumberAirPage() {
             <div className="flex border border-gray-300 rounded-lg overflow-hidden">
               <button
                 onClick={() => setMapView('map')}
-                className={`px-3 py-1 text-sm ${mapView === 'map' ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700'}`}
+                className={`px-3 py-1 text-sm ${mapView === 'map' ? 'bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white' : 'bg-gray-50 text-gray-700'}`}
               >
                 Peta
               </button>
@@ -543,7 +543,7 @@ export default function SumberAirPage() {
                 <Plus className="w-4 h-4" />
                 Tambah Sumber Air Pertama
               </button>
-            </div>
+            </div> 
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -978,7 +978,7 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>

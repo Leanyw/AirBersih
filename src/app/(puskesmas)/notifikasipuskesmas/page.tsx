@@ -846,14 +846,14 @@ export default function PuskesmasNotifikasiPage() {
               <button
                 onClick={markAllAsRead}
                 disabled={stats.unread === 0}
-                className="flex items-center gap-2 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors font-medium"
+                className="flex items-center gap-2 px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-80 font-medium"
               >
                 <CheckCheck className="w-4 h-4" />
                 Tandai Semua Dibaca
               </button>
               <Link
                 href="/laporanwarga"
-                className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+                className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
               >
                 <Eye className="w-4 h-4" />
                 Lihat Laporan
@@ -1298,7 +1298,7 @@ export default function PuskesmasNotifikasiPage() {
                       )}
                       <button
                         onClick={() => setShowDetailModal(false)}
-                        className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 border border-gray-300 text-white rounded-lg"
                       >
                         Tutup
                       </button>

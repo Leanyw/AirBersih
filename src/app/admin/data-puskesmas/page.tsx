@@ -240,7 +240,7 @@ export default function DataPuskesmasPage() {
             resetForm();
             setModal("add");
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg"
         >
           <Plus className="w-4 h-4" />
           Tambah Puskesmas
@@ -433,7 +433,7 @@ export default function DataPuskesmasPage() {
             {modal !== "detail" && (
               <button
                 onClick={handleSubmit}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg"
+                className="mt-4 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg"
               >
                 Simpan
               </button>

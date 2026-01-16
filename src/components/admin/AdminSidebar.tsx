@@ -70,25 +70,28 @@ export default function AdminSidebar() {
         className={`
         ${isCollapsed ? "w-20" : "w-64"} 
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-        fixed lg:relative h-screen bg-gradient-to-b from-blue-900 to-blue-950 text-white 
+        fixed lg:relative h-screen bg-gradient-to-br from-blue-500 to-cyan-400 text-white 
         flex flex-col transition-all duration-300 z-40
-      `}
-      >
+      `}>
         {/* Logo */}
         <div className="p-6 border-b border-blue-800">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
-              <ChessQueen className="w-6 h-6 text-blue-600" />
+            <div className="w-12 h-12 flex items-center justify-center">
+              <img 
+                src="/logo.png" 
+                alt="Logo AirBersih" 
+                className="w-full h-full object-contain"
+              />
             </div>
             {!isCollapsed && (
               <div>
                 <h1 className="text-xl font-bold">DinKes</h1>
-                <p className="text-xs text-blue-300">Portal Air Bersih</p>
+                <p className="text-xs text-white">Portal Air Bersih</p>
               </div>
             )}
           </div>
         </div>
-
+      
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
           {navigation.map((item) => {
@@ -102,8 +105,8 @@ export default function AdminSidebar() {
                   isCollapsed ? "justify-center px-3" : "px-4"
                 } py-3 rounded-xl transition-all ${
                   isActive
-                    ? "bg-blue-700 text-white shadow-lg"
-                    : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                    ? "bg-[#1E5EFF] text-white shadow-lg"
+                    : "text-blue-100 hover:bg-[#2F6BFF] hover:text-white"
                 }`}
                 onClick={() => setIsMobileOpen(false)}
               >
@@ -123,7 +126,7 @@ export default function AdminSidebar() {
           }`}
         >
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center text-white font-bold">
+            <div className="w-10 h-10 bg-[#1E5EFF] rounded-full flex items-center justify-center text-white font-bold">
               Admin
             </div>
 
@@ -136,7 +139,7 @@ export default function AdminSidebar() {
                 <div className="space-y-1 mt-1">
                   <div className="flex items-center gap-1">
                     <Mail className="w-3 h-3 text-blue-300" />
-                    <p className="text-xs text-blue-300 truncate" title="Admin">
+                    <p className="text-xs text-white truncate" title="Admin">
                       Admin
                     </p>
                   </div>

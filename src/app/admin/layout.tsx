@@ -17,7 +17,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
             </main>
             <footer className="bg-white border-t border-gray-200 py-3 px-6">
               <p className="text-sm text-gray-600 text-center">
-                Admin Dashboard • © 2024 Air Bersih
+                Admin Dashboard • © 2026 Air Bersih
               </p>
             </footer>
           </div>

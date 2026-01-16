@@ -43,7 +43,6 @@ type Report = {
   bau: string;
   rasa: string;
   warna: string;
-  suhu?: number;
   lokasi: string;
   deskripsi?: string;
   foto_url?: string;
@@ -184,7 +183,6 @@ export default function PuskesmasLaporanPage() {
         bau: report.bau || 'tidak_berbau',
         rasa: report.rasa || 'normal',
         warna: report.warna || 'jernih',
-        suhu: report.suhu,
         lokasi: report.lokasi || '',
         deskripsi: report.keterangan || '',
         foto_url: report.foto_url,
@@ -300,8 +298,6 @@ export default function PuskesmasLaporanPage() {
       case 'rasa':
         return isProblem ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-green-500" />;
       case 'warna':
-        return isProblem ? <AlertCircle className="w-4 h-4 text-red-500" /> : <Droplets className="w-4 h-4 text-green-500" />;
-      case 'suhu':
         return <Thermometer className="w-4 h-4 text-blue-500" />;
       default:
         return <Activity className="w-4 h-4 text-gray-500" />;
@@ -462,7 +458,7 @@ export default function PuskesmasLaporanPage() {
   };
 
   const exportToCSV = () => {
-    const headers = ['ID', 'Nama Pelapor', 'Email', 'Telepon', 'Lokasi', 'RT/RW', 'Kecamatan', 'Status', 'Tanggal', 'Bau', 'Rasa', 'Warna', 'Suhu', 'Deskripsi', 'Catatan'];
+    const headers = ['ID', 'Nama Pelapor', 'Email', 'Telepon', 'Lokasi', 'RT/RW', 'Kecamatan', 'Status', 'Tanggal', 'Bau', 'Rasa', 'Warna', 'Deskripsi', 'Catatan'];
     const csvContent = [
       headers.join(','),
       ...filteredReports.map(report => [
@@ -478,7 +474,6 @@ export default function PuskesmasLaporanPage() {
         getConditionText('bau', report.bau),
         getConditionText('rasa', report.rasa),
         getConditionText('warna', report.warna),
-        report.suhu || '-',
         `"${report.deskripsi || ''}"`,
         `"${report.catatan || ''}"`
       ].join(','))
@@ -642,7 +637,7 @@ export default function PuskesmasLaporanPage() {
               {isRefreshing ? 'Memperbarui...' : 'Refresh Data'}
             </button>
             <div className="relative group">
-              <button className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium">
+              <button className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-xl font-medium">
                 <Download className="w-4 h-4" />
                 Export
               </button>
@@ -1073,7 +1068,7 @@ export default function PuskesmasLaporanPage() {
                       <div className="flex flex-col gap-2">
                         <button
                           onClick={() => handleViewReport(report)}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg text-sm font-medium"
                         >
                           <Eye className="w-4 h-4" />
                           Detail
@@ -1303,7 +1298,7 @@ export default function PuskesmasLaporanPage() {
                     <Droplets className="w-5 h-5 text-blue-600" />
                     Kondisi Air yang Dilaporkan
                   </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                     <div className={`text-center p-4 rounded-xl border ${getConditionColor('bau', selectedReport.bau).includes('red') ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
                       <div className="text-sm text-gray-500 mb-2">Bau</div>
                       <div className="text-xl font-bold mb-2">
@@ -1324,13 +1319,6 @@ export default function PuskesmasLaporanPage() {
                         {getConditionText('warna', selectedReport.warna)}
                       </div>
                       {getConditionIcon('warna', selectedReport.warna)}
-                    </div>
-                    <div className="text-center p-4 rounded-xl border bg-blue-50 border-blue-200">
-                      <div className="text-sm text-gray-500 mb-2">Suhu</div>
-                      <div className="text-xl font-bold mb-2">
-                        {selectedReport.suhu ? `${selectedReport.suhu}°C` : '-'}
-                      </div>
-                      <Thermometer className="w-6 h-6 text-blue-500 mx-auto" />
                     </div>
                   </div>
 
@@ -1440,7 +1428,7 @@ export default function PuskesmasLaporanPage() {
                         <button
                           onClick={() => handleUpdateNote(selectedReport.id)}
                           disabled={isUpdatingNote || !modalNote.trim()}
-                          className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-5 py-2.5 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isUpdatingNote ? 'Menyimpan...' : 'Simpan Catatan'}
                         </button>
@@ -1489,7 +1477,7 @@ export default function PuskesmasLaporanPage() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => setShowModal(false)}
-                    className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                    className="px-5 py-2.5 border bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 border-gray-300 text-white rounded-lg font-medium"
                   >
                     Tutup
                   </button>

@@ -26,14 +26,21 @@ import {
   Eye
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { format } from 'date-fns'
+import { id } from 'date-fns/locale'
+import { X, User, Phone, Mail, ShieldAlert, Calendar, FileEdit, Image as ImageIcon } from 'lucide-react'
 
 interface Report {
   id: string
   user_id: string
-  users?: {
+  user?: {
     nama: string
     phone: string
     email: string
+    kecamatan?: string
+    rt?: string
+    rw?: string
+    alamat?: string
   }
   lokasi: string
   keterangan: string
@@ -41,10 +48,13 @@ interface Report {
   bau: string
   rasa: string
   warna: string
+  suhu?: number
   status: 'pending' | 'diproses' | 'selesai' | 'ditolak'
   created_at: string
+  updated_at?: string
+  catatan?: string
+  deskripsi?: string  // Tambahkan ini
 }
-
 interface DashboardStats {
   totalLaporan: number
   pendingLaporan: number
@@ -72,6 +82,11 @@ export default function PuskesmasDashboard() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  // Tambahkan state untuk modal (setelah state yang sudah ada)
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [modalNote, setModalNote] = useState('')
+  const [isUpdatingNote, setIsUpdatingNote] = useState(false)
 
   useEffect(() => {
     if (user && profile?.role === 'puskesmas') {
@@ -233,7 +248,7 @@ export default function PuskesmasDashboard() {
       // 3. Gabungkan data warga dengan laporan
       const reportsWithUsers: Report[] = (reportsData || []).map(report => ({
         ...report,
-        users: wargaMap.get(report.user_id)
+        user: wargaMap.get(report.user_id)
       }))
 
       console.log(`✅ Found ${reportsWithUsers.length} recent reports`)
@@ -249,37 +264,51 @@ export default function PuskesmasDashboard() {
     setIsRefreshing(true)
     fetchDashboardData()
   }
+  const handleViewReport = (report: Report) => {
+    setSelectedReport(report)
+    setModalNote(report.catatan || '')
+    setShowModal(true)
+  }
+  const handleUpdateNote = async (reportId: string) => {
+    if (!modalNote.trim()) {
+      toast.error('Catatan tidak boleh kosong')
+      return
+    }
 
-  const updateReportStatus = async (reportId: string, status: 'pending' | 'diproses' | 'selesai' | 'ditolak') => {
     try {
+      setIsUpdatingNote(true)
       const { error } = await supabase
         .from('reports')
         .update({
-          status,
+          catatan: modalNote,
           updated_at: new Date().toISOString()
         })
         .eq('id', reportId)
 
       if (error) throw error
 
-      toast.success('Status berhasil diperbarui')
-
-      // Update local state
-      setReports(reports.map(report =>
+      const updatedReports = reports.map(report =>
         report.id === reportId
-          ? { ...report, status }
+          ? { ...report, catatan: modalNote, updated_at: new Date().toISOString() }
           : report
-      ))
+      )
 
-      // Refresh stats
-      fetchDashboardData()
+      setReports(updatedReports)
 
-    } catch (error) {
-      console.error('Error updating status:', error)
-      toast.error('Gagal mengupdate status')
+      if (selectedReport?.id === reportId) {
+        setSelectedReport(prev => prev ? { ...prev, catatan: modalNote } : null)
+      }
+
+      toast.success('Catatan berhasil ditambahkan')
+
+    } catch (error: any) {
+      console.error('❌ Error mengupdate catatan:', error)
+      toast.error('Gagal menyimpan catatan')
+    } finally {
+      setIsUpdatingNote(false)
     }
   }
-
+  
   // Helper functions
   const extractRT = (location: string) => {
     const match = location.match(/RT\s*(\d+)/i)
@@ -346,6 +375,60 @@ export default function PuskesmasDashboard() {
     return texts[type]?.[condition] || condition
   }
 
+  const getConditionIcon = (type: string, value: string) => {
+  const isProblem = ['berbau_besi', 'berbau_busuk', 'berbau_kaporit', 'tidak_normal', 'pahit', 'asin', 'keruh', 'kecoklatan', 'kehijauan'].includes(value)
+
+  switch (type) {
+    case 'bau':
+      return isProblem ? <ShieldAlert className="w-4 h-4 text-red-500" /> : <Droplets className="w-4 h-4 text-green-500" />
+    case 'rasa':
+      return isProblem ? <AlertTriangle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-green-500" />
+    case 'warna':
+      return isProblem ? <AlertCircle className="w-4 h-4 text-red-500" /> : <Droplets className="w-4 h-4 text-green-500" />
+    default:
+      return <Activity className="w-4 h-4 text-gray-500" />
+  }
+}
+const updateReportStatus = async (reportId: string, status: 'pending' | 'diproses' | 'selesai' | 'ditolak') => {
+  try {
+    const { error } = await supabase
+      .from('reports')
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reportId)
+
+    if (error) throw error
+
+    toast.success('Status berhasil diperbarui')
+
+    // Update local state
+    setReports(reports.map(report =>
+      report.id === reportId
+        ? { ...report, status, updated_at: new Date().toISOString() }
+        : report
+    ))
+
+    // Update selected report di modal juga
+    if (selectedReport?.id === reportId) {
+      setSelectedReport(prev => prev ? { ...prev, status, updated_at: new Date().toISOString() } : null)
+    }
+
+    // Refresh stats
+    fetchDashboardData()
+
+  } catch (error) {
+    console.error('Error updating status:', error)
+    toast.error('Gagal mengupdate status')
+  }
+}
+
+const getConditionColor = (type: string, value: string) => {
+  const isProblem = ['berbau_besi', 'berbau_busuk', 'berbau_kaporit', 'tidak_normal', 'pahit', 'asin', 'keruh', 'kecoklatan', 'kehijauan'].includes(value)
+  return isProblem ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'
+}
+
   // Loading state
   if (isLoading && !isRefreshing) {
     return (
@@ -369,7 +452,7 @@ export default function PuskesmasDashboard() {
   return (
     <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-teal-600 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-blue-500 to-cyan-400 rounded-2xl p-6 text-white">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold">Dashboard Puskesmas</h1>
@@ -388,7 +471,7 @@ export default function PuskesmasDashboard() {
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="bg-[#1E5EFF] hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               {isRefreshing ? 'Memperbarui...' : 'Refresh'}
@@ -478,10 +561,10 @@ export default function PuskesmasDashboard() {
                           </div>
                           <div>
                             <div className="font-semibold text-gray-800">
-                              {report.users?.nama || 'Warga'}
+                              {report.user?.nama || 'Warga'}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {report.users?.email || 'email@example.com'} • {report.users?.phone || '-'}
+                              {report.user?.email || 'email@example.com'} • {report.user?.phone || '-'}
                             </div>
                           </div>
                         </div>
@@ -563,7 +646,7 @@ export default function PuskesmasDashboard() {
                         </button>
                       </div>
                       <button
-                        onClick={() => router.push(`/laporanwarga/${report.id}`)}
+                        onClick={() => handleViewReport(report)}
                         className="text-blue-600 text-sm font-medium hover:text-blue-800 flex items-center gap-1"
                       >
                         <Eye className="w-4 h-4" />
@@ -717,6 +800,275 @@ export default function PuskesmasDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Modal Detail Report */}
+      {showModal && selectedReport && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              {/* Modal Header */}
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Detail Laporan Lengkap</h3>
+                  <p className="text-gray-600 mt-1">ID: #{selectedReport.id.slice(0, 8)}</p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Informasi Pelapor */}
+                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <User className="w-5 h-5 text-blue-600" />
+                    Informasi Pelapor
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-1">Nama Lengkap</label>
+                      <p className="font-medium text-gray-900">{selectedReport.user?.nama || 'Tidak diketahui'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-1">Email</label>
+                      <p className="font-medium text-gray-900">{selectedReport.user?.email || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-1">Nomor Telepon</label>
+                      <p className="font-medium text-gray-900">{selectedReport.user?.phone || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-1">Alamat Lengkap</label>
+                      <p className="font-medium text-gray-900">{selectedReport.user?.alamat || '-'}</p>
+                    </div>
+                    {selectedReport.user?.rt && selectedReport.user?.rw && (
+                      <div>
+                        <label className="text-sm text-gray-500 block mb-1">RT/RW</label>
+                        <p className="font-medium text-gray-900">RT {selectedReport.user.rt}/RW {selectedReport.user.rw}</p>
+                      </div>
+                    )}
+                    {selectedReport.user?.kecamatan && (
+                      <div>
+                        <label className="text-sm text-gray-500 block mb-1">Kecamatan</label>
+                        <p className="font-medium text-gray-900">{selectedReport.user.kecamatan}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Kondisi Air */}
+                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <Droplets className="w-5 h-5 text-blue-600" />
+                    Kondisi Air yang Dilaporkan
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                    <div className={`text-center p-4 rounded-xl border ${
+                      ['berbau_besi', 'berbau_busuk', 'berbau_kaporit'].includes(selectedReport.bau) 
+                        ? 'bg-red-50 border-red-200' 
+                        : 'bg-green-50 border-green-200'
+                    }`}>
+                      <div className="text-sm text-gray-500 mb-2">Bau</div>
+                      <div className="text-xl font-bold mb-2">
+                        {getConditionText(selectedReport.bau, 'bau')}
+                      </div>
+                      {getConditionIcon('bau', selectedReport.bau)}
+                    </div>
+                    
+                    <div className={`text-center p-4 rounded-xl border ${
+                      ['tidak_normal', 'pahit', 'asin'].includes(selectedReport.rasa)
+                        ? 'bg-red-50 border-red-200' 
+                        : 'bg-green-50 border-green-200'
+                    }`}>
+                      <div className="text-sm text-gray-500 mb-2">Rasa</div>
+                      <div className="text-xl font-bold mb-2">
+                        {getConditionText(selectedReport.rasa, 'rasa')}
+                      </div>
+                      {getConditionIcon('rasa', selectedReport.rasa)}
+                    </div>
+                    
+                    <div className={`text-center p-4 rounded-xl border ${
+                      ['keruh', 'kecoklatan', 'kehijauan'].includes(selectedReport.warna)
+                        ? 'bg-red-50 border-red-200' 
+                        : 'bg-green-50 border-green-200'
+                    }`}>
+                      <div className="text-sm text-gray-500 mb-2">Warna</div>
+                      <div className="text-xl font-bold mb-2">
+                        {getConditionText(selectedReport.warna, 'warna')}
+                      </div>
+                      {getConditionIcon('warna', selectedReport.warna)}
+                    </div>
+                  </div>
+
+                  {selectedReport.deskripsi && (
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-2">Deskripsi Tambahan</label>
+                      <p className="text-gray-700 bg-white p-4 rounded-xl border border-gray-200">
+                        {selectedReport.deskripsi}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lokasi & Waktu */}
+                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-blue-600" />
+                    Lokasi & Waktu Laporan
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-sm text-gray-500 block mb-2">Lokasi Kejadian</label>
+                      <p className="font-medium text-gray-900 text-lg">{selectedReport.lokasi}</p>
+                      {selectedReport.user?.rt && selectedReport.user?.rw && (
+                        <p className="text-gray-600 mt-1">RT {selectedReport.user.rt}/RW {selectedReport.user.rw}</p>
+                      )}
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm text-gray-500 block mb-1">Dilaporkan pada</label>
+                        <p className="font-medium text-gray-900">
+                          {format(new Date(selectedReport.created_at), 'dd MMMM yyyy HH:mm', { locale: id })}
+                        </p>
+                      </div>
+                      {selectedReport.updated_at && (
+                        <div>
+                          <label className="text-sm text-gray-500 block mb-1">Terakhir diupdate</label>
+                          <p className="font-medium text-gray-900">
+                            {format(new Date(selectedReport.updated_at), 'dd MMMM yyyy HH:mm', { locale: id })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status & Catatan */}
+                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                  <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                    <FileEdit className="w-5 h-5 text-blue-600" />
+                    Status & Catatan
+                  </h4>
+
+                  <div className="mb-6">
+                    <label className="text-sm text-gray-500 block mb-3">Ubah Status Laporan</label>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => updateReportStatus(selectedReport.id, 'pending')}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                      >
+                        Menunggu
+                      </button>
+                      <button
+                        onClick={() => updateReportStatus(selectedReport.id, 'diproses')}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'diproses'
+                          ? 'bg-blue-100 text-blue-800 border-blue-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                      >
+                        Diproses
+                      </button>
+                      <button
+                        onClick={() => updateReportStatus(selectedReport.id, 'selesai')}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'selesai'
+                          ? 'bg-green-100 text-green-800 border-green-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                      >
+                        Selesai
+                      </button>
+                      <button
+                        onClick={() => updateReportStatus(selectedReport.id, 'ditolak')}
+                        className={`px-4 py-2.5 rounded-lg font-medium border transition-colors ${selectedReport.status === 'ditolak'
+                          ? 'bg-red-100 text-red-800 border-red-300'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                      >
+                        Ditolak
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-gray-500 block mb-3">Tambah/Edit Catatan</label>
+                    <div className="space-y-3">
+                      <textarea
+                        value={modalNote}
+                        onChange={(e) => setModalNote(e.target.value)}
+                        placeholder="Tambahkan catatan untuk laporan ini (tindakan yang diambil, hasil pemeriksaan, dll.)"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        rows={4}
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => handleUpdateNote(selectedReport.id)}
+                          disabled={isUpdatingNote || !modalNote.trim()}
+                          className="px-5 py-2.5 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isUpdatingNote ? 'Menyimpan...' : 'Simpan Catatan'}
+                        </button>
+                      </div>
+
+                      {selectedReport.catatan && (
+                        <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                          <div className="text-sm text-gray-500 mb-2">Catatan Saat Ini:</div>
+                          <p className="text-gray-700">{selectedReport.catatan}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Foto jika ada */}
+                {selectedReport.foto_url && (
+                  <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+                    <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-blue-600" />
+                      Foto Pendukung
+                    </h4>
+                    <div className="flex justify-center">
+                      <img
+                        src={selectedReport.foto_url}
+                        alt="Foto laporan"
+                        className="max-w-full h-auto rounded-xl border border-gray-300 shadow-lg"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.onerror = null;
+                          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iI2YzZjZmOSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIGZpbGw9IiM5Y2EwYTYiPkZvdG8gdGlkYWsgdGVyc2VkaWE8L3RleHQ+PC9zdmc+';
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="mt-8 pt-6 border-t border-gray-200 flex flex-col sm:flex-row justify-between gap-4">
+                <div className="text-sm text-gray-500">
+                  <p>Laporan ID: {selectedReport.id}</p>
+                  <p className="mt-1">Dibuat: {format(new Date(selectedReport.created_at), 'dd/MM/yyyy HH:mm:ss')}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="px-5 py-2.5 border bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 border-gray-300 text-white rounded-lg font-medium"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

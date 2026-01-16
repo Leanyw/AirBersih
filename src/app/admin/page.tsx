@@ -855,7 +855,7 @@ export default function StatistikPage() {
                     <div className="relative w-full h-48 flex items-end justify-center bg-gray-50 rounded-t-lg">
                       {/* Bar */}
                       <div
-                        className="w-full mx-1 bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md transition-all duration-500 relative hover:from-blue-700 hover:to-blue-500 shadow-sm"
+                        className="w-full mx-1 bg-gradient-to-t from-blue-500 to-cyan-400 rounded-t-md transition-all duration-500 relative hover:from-blue-700 hover:to-blue-500 shadow-sm"
                         style={{ height: `${displayHeight}%` }}
                       >
                         {/* Tooltip/Label */}

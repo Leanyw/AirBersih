@@ -154,7 +154,7 @@ export default function PuskesmasHeader() {
                 <p className="text-xs text-gray-600">{getUserRole()}</p>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center text-white font-bold">
                   {getInitials()}
                 </div>
               </div>

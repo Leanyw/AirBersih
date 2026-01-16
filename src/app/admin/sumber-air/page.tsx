@@ -371,7 +371,7 @@ export default function SumberAirPage() {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             Tambah Sumber
@@ -439,7 +439,7 @@ export default function SumberAirPage() {
                 onClick={() => setMapView("map")}
                 className={`px-3 py-1 text-sm ${
                   mapView === "map"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white"
                     : "bg-gray-50 text-gray-700"
                 }`}
               >
