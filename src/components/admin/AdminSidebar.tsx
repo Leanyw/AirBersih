@@ -72,14 +72,15 @@ export default function AdminSidebar() {
         ${isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         fixed lg:relative h-screen bg-gradient-to-br from-blue-500 to-cyan-400 text-white 
         flex flex-col transition-all duration-300 z-40
-      `}>
+      `}
+      >
         {/* Logo */}
         <div className="p-6 border-b border-blue-800">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 flex items-center justify-center">
-              <img 
-                src="/logo.png" 
-                alt="Logo AirBersih" 
+              <img
+                src="/logo.png"
+                alt="Logo AirBersih"
                 className="w-full h-full object-contain"
               />
             </div>
@@ -91,7 +92,7 @@ export default function AdminSidebar() {
             )}
           </div>
         </div>
-      
+
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
           {navigation.map((item) => {
@@ -127,7 +128,7 @@ export default function AdminSidebar() {
         >
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-[#1E5EFF] rounded-full flex items-center justify-center text-white font-bold">
-              Admin
+              AD
             </div>
 
             {!isCollapsed && (
@@ -140,7 +141,7 @@ export default function AdminSidebar() {
                   <div className="flex items-center gap-1">
                     <Mail className="w-3 h-3 text-blue-300" />
                     <p className="text-xs text-white truncate" title="Admin">
-                      Admin
+                      admin@example.com
                     </p>
                   </div>
                 </div>

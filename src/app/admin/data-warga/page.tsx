@@ -425,13 +425,6 @@ export default function DataWargaPage() {
             <Users className="w-8 h-8 text-blue-600" />
             Data Warga
           </h1>
-          <p className="text-gray-600 mt-2">
-            Puskesmas:{" "}
-            {profile?.nama || profile?.kecamatan || "Tidak diketahui"}
-          </p>
-          <p className="text-sm text-gray-500">
-            Kecamatan: {profile?.kecamatan || "Tidak diketahui"}
-          </p>
         </div>
 
         <div className="flex gap-3">
@@ -444,11 +437,6 @@ export default function DataWargaPage() {
               className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`}
             />
             Refresh
-          </button>
-
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg">
-            <UserPlus className="w-4 h-4" />
-            Tambah Warga
           </button>
         </div>
       </div>

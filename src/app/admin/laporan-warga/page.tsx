@@ -647,7 +647,7 @@ export default function PuskesmasLaporanPage() {
     );
   }
 
-  if (!profile || profile.role !== "puskesmas") {
+  if (!profile || profile.role !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-white p-4">
         <div className="text-center max-w-md">

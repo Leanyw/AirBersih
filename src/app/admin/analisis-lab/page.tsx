@@ -233,10 +233,10 @@ export default function AnalisisLabPage() {
   useEffect(() => {
     console.log("🔄 useEffect triggered, profile role:", profile?.role);
 
-    if (user && profile?.role === "puskesmas") {
+    if (user && profile?.role === "admin") {
       console.log("✅ User is puskesmas, fetching data...");
       fetchWaterReports();
-    } else if (user && profile?.role !== "puskesmas") {
+    } else if (user && profile?.role !== "admin") {
       console.log("❌ User bukan puskesmas, role:", profile?.role);
       toast.error("Hanya untuk puskesmas");
       router.push("/dashboard");
