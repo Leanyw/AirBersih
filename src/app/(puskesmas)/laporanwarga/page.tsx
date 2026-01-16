@@ -72,8 +72,6 @@ export default function PuskesmasLaporanPage() {
   const [filterDate, setFilterDate] = useState<string>('');
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [modalNote, setModalNote] = useState('');
-  const [isUpdatingNote, setIsUpdatingNote] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [filterCondition, setFilterCondition] = useState<{
     bau?: string;
@@ -400,60 +398,10 @@ export default function PuskesmasLaporanPage() {
     }
   };
 
-  const handleUpdateNote = async (reportId: string) => {
-    if (!modalNote.trim()) {
-      toast.error('Catatan tidak boleh kosong', {
-        icon: '📝'
-      });
-      return;
-    }
 
-    try {
-      setIsUpdatingNote(true);
-
-      const { error } = await supabase
-        .from('reports')
-        .update({
-          catatan: modalNote,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', reportId);
-
-      if (error) throw error;
-
-      // Update local state
-      const updatedReports = reports.map(report =>
-        report.id === reportId
-          ? { ...report, catatan: modalNote, updated_at: new Date().toISOString() }
-          : report
-      );
-
-      setReports(updatedReports);
-
-      // Update selected report if open
-      if (selectedReport?.id === reportId) {
-        setSelectedReport(prev => prev ? { ...prev, catatan: modalNote } : null);
-      }
-
-      toast.success('Catatan berhasil ditambahkan', {
-        icon: '💾'
-      });
-
-      setModalNote('');
-
-    } catch (error: any) {
-      console.error('❌ Error mengupdate catatan:', error);
-      toast.error('Gagal menyimpan catatan', {
-        icon: '❌'
-      });
-    } finally {
-      setIsUpdatingNote(false);
-    }
-  };
 
   const handleViewReport = (report: Report) => {
     setSelectedReport(report);
-    setModalNote(report.catatan || '');
     setShowModal(true);
   };
 
@@ -1415,32 +1363,12 @@ export default function PuskesmasLaporanPage() {
                   </div>
 
                   <div>
-                    <label className="text-sm text-gray-500 block mb-3">Tambah/Edit Catatan</label>
-                    <div className="space-y-3">
-                      <textarea
-                        value={modalNote}
-                        onChange={(e) => setModalNote(e.target.value)}
-                        placeholder="Tambahkan catatan untuk laporan ini (tindakan yang diambil, hasil pemeriksaan, dll.)"
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        rows={4}
-                      />
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => handleUpdateNote(selectedReport.id)}
-                          disabled={isUpdatingNote || !modalNote.trim()}
-                          className="px-5 py-2.5 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isUpdatingNote ? 'Menyimpan...' : 'Simpan Catatan'}
-                        </button>
+                    {selectedReport.catatan && (
+                      <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                        <div className="text-sm text-gray-500 mb-2">Catatan Saat Ini:</div>
+                        <p className="text-gray-700">{selectedReport.catatan}</p>
                       </div>
-
-                      {selectedReport.catatan && (
-                        <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
-                          <div className="text-sm text-gray-500 mb-2">Catatan Saat Ini:</div>
-                          <p className="text-gray-700">{selectedReport.catatan}</p>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
 
