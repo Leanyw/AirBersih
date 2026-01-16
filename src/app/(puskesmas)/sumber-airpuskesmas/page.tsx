@@ -543,7 +543,7 @@ export default function SumberAirPage() {
                 <Plus className="w-4 h-4" />
                 Tambah Sumber Air Pertama
               </button>
-            </div> 
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200">

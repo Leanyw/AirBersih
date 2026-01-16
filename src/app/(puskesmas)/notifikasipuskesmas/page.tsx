@@ -96,6 +96,16 @@ export default function PuskesmasNotifikasiPage() {
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
+  // State untuk form notifikasi baru
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    message: '',
+    type: 'info',
+    kecamatan: profile?.kecamatan || ''
+  });
+
   // Fetch notifikasi dengan error handling yang lebih baik
   const fetchNotifications = useCallback(async () => {
     if (!user || !profile) return;
@@ -684,6 +694,96 @@ export default function PuskesmasNotifikasiPage() {
     }
   };
 
+  // Helper type mapping
+  const mapTypeToDb = (type: string) => {
+    switch (type) {
+      case 'bahaya': return 'urgent';
+      case 'warning': return 'warning';
+      case 'aman': return 'info';
+      default: return 'info';
+    }
+  };
+
+  // Handle create notification
+  const handleCreateNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !profile) return;
+
+    try {
+      setIsSubmitting(true);
+
+      if (!createForm.title || !createForm.message) {
+        toast.error('Judul dan pesan harus diisi');
+        return;
+      }
+
+      // 1. Cari user di kecamatan target
+      const { data: usersInKecamatan, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('kecamatan', `%${createForm.kecamatan}%`) // Flexible search
+        .eq('role', 'warga');
+
+      let successCount = 0;
+
+      // 2. Kirim notifikasi ke warga (Broadcast)
+      if (usersInKecamatan && usersInKecamatan.length > 0) {
+        const notificationsToInsert = usersInKecamatan.map(u => ({
+          user_id: u.id,
+          puskesmas_id: user.id,
+          title: createForm.title,
+          message: createForm.message,
+          type: mapTypeToDb(createForm.type),
+          is_read: false,
+          created_at: new Date().toISOString()
+        }));
+
+        const { error: insertError } = await supabase
+          .from('notifications')
+          .insert(notificationsToInsert);
+
+        if (insertError) throw insertError;
+        successCount = usersInKecamatan.length;
+      }
+
+      // 3. Simpan juga copy untuk Puskesmas -> Skip karena user_id FK issue
+      // Notifikasi yang dikirim ke warga akan muncul di list karena puskesmas_id = user.id
+
+      toast.success(`Notifikasi berhasil dikirim ke ${successCount} warga`);
+      setShowCreateModal(false);
+      setCreateForm({
+        title: '',
+        message: '',
+        type: 'info',
+        kecamatan: profile?.kecamatan || ''
+      });
+
+      // Refresh list to show the sent broadcast items
+      await fetchNotifications();
+
+      // 3. Tambahkan notifikasi summary lokal (POV Puskesmas)
+      // Ini hanya di client-side agar tidak kena error FK di database
+      const summaryNotification: Notification = {
+        id: `sent-${Date.now()}`,
+        user_id: user.id, // Aman di local state
+        puskesmas_id: user.id,
+        title: `✅ [Terkirim] ${createForm.title}`,
+        message: `Berhasil mengirim notifikasi ke ${successCount} warga di ${createForm.kecamatan}.\n\nIsi: ${createForm.message}`,
+        type: 'info',
+        is_read: true,
+        created_at: new Date().toISOString()
+      };
+
+      setNotifications(prev => [summaryNotification, ...prev]);
+
+    } catch (error: any) {
+      console.error('Error sending notification:', error);
+      toast.error('Gagal mengirim notifikasi: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Helper functions
   const getNotificationIcon = (type?: string) => {
     switch (type) {
@@ -851,13 +951,13 @@ export default function PuskesmasNotifikasiPage() {
                 <CheckCheck className="w-4 h-4" />
                 Tandai Semua Dibaca
               </button>
-              <Link
-                href="/laporanwarga"
-                className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
               >
-                <Eye className="w-4 h-4" />
-                Lihat Laporan
-              </Link>
+                <Send className="w-4 h-4" />
+                Kirim Notifikasi
+              </button>
             </div>
           </div>
         </div>
@@ -1420,6 +1520,109 @@ export default function PuskesmasNotifikasiPage() {
           <p>© {new Date().getFullYear()} Sistem Notifikasi Air Bersih</p>
           <p className="mt-1">Puskesmas {profile?.kecamatan || 'Wilayah'} • Notifikasi real-time aktif</p>
         </div>
+        {/* Modal Kirim Notifikasi */}
+        {showCreateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-all">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Send className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900">Kirim Notifikasi</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateNotification} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Judul Notifikasi</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      placeholder="Contoh: Informasi Kualitas Air"
+                      value={createForm.title}
+                      onChange={e => setCreateForm({ ...createForm, title: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
+                      <select
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all"
+                        value={createForm.type}
+                        onChange={e => setCreateForm({ ...createForm, type: e.target.value })}
+                      >
+                        <option value="info">ℹ️ Info</option>
+                        <option value="warning">⚠️ Warning</option>
+                        <option value="bahaya">🚨 Bahaya</option>
+                        <option value="aman">✅ Aman</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Kecamatan</label>
+                      <input
+                        type="text"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 transition-all"
+                        value={createForm.kecamatan}
+                        onChange={e => setCreateForm({ ...createForm, kecamatan: e.target.value })}
+                        placeholder="Nama Kecamatan"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Isi Pesan</label>
+                    <textarea
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[120px] transition-all"
+                      placeholder="Tulis pesan lengkap notifikasi di sini..."
+                      value={createForm.message}
+                      onChange={e => setCreateForm({ ...createForm, message: e.target.value })}
+                      required
+                    ></textarea>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-gray-100 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-70 flex items-center justify-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Mengirim...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" />
+                          Kirim Sekarang
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
