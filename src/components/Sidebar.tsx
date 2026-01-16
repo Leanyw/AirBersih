@@ -78,8 +78,12 @@ export default function Sidebar() {
           {/* Logo */}
           <div className="p-6 border-b">
             <div className="flex items-center space-x-3">
-              <div className="bg-gradient-to-br from-blue-500 to-cyan-400 p-3 rounded-xl">
-                <Droplets className="w-8 h-8 text-white" />
+              <div className="w-12 h-12 flex items-center justify-center">
+                <img 
+                  src="/logo.png" 
+                  alt="Logo AirBersih" 
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Air Bersih</h1>

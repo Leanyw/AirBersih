@@ -92,7 +92,7 @@ const handleLogin = async (e: React.FormEvent) => {
   return (
     <div className="min-h-screen grid md:grid-cols-2 bg-gradient-to-br from-blue-50 via-white to-cyan-50">
       {/* LEFT - Sidebar */}
-      <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-teal-600 text-white px-12">
+      <div className="hidden md:flex bg-gradient-to-br from-blue-500 to-cyan-400 text-white px-12">
         <div className="max-w-md mx-auto flex flex-col justify-center">
           <div className="mb-10">
             <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
@@ -147,7 +147,7 @@ const handleLogin = async (e: React.FormEvent) => {
           {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              <div className="bg-gradient-to-r from-blue-600 to-teal-600 p-3 rounded-2xl">
+              <div className="bg-gradient-to-r from-blue-500 to-cyan-400 p-3 rounded-2xl">
                 <Lock className="w-7 h-7 text-white" />
               </div>
             </div>
@@ -313,7 +313,7 @@ const handleLogin = async (e: React.FormEvent) => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-600 to-teal-600 hover:from-blue-700 hover:to-teal-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-050 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center gap-2">
