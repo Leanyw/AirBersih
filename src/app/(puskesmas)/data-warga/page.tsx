@@ -433,11 +433,6 @@ export default function DataWargaPage() {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          
-          <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg">
-            <UserPlus className="w-4 h-4" />
-            Tambah Warga
-          </button>
         </div>
       </div>
 
