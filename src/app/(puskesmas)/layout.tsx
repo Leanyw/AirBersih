@@ -22,11 +22,11 @@ export default function PuskesmasLayout({
     <>
       <Toaster position="top-right" />
       <AuthProvider>
-        <div className="flex h-screen">
+        <div className="flex h-screen bg-gray-50 overflow-hidden">
           <PuskesmasSidebar />
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
             <PuskesmasHeader />
-            <main className="flex-1 overflow-y-auto p-4 md:p-6">
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50">
               {children}
             </main>
             <footer className="bg-white border-t border-gray-200 py-3 px-6">

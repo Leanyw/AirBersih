@@ -122,6 +122,27 @@ export default function PuskesmasSidebar() {
         flex flex-col transition-all duration-300 z-40
       `}>
         
+        {/* Custom Scrollbar Style */}
+        <style jsx>{`
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+          }
+          
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+          }
+          
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+          }
+          
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+          }
+        `}</style>
+
       {/* Logo */}
       <div className="p-6 border-b border-blue-800">
         <div className="flex items-center space-x-3">
@@ -142,7 +163,7 @@ export default function PuskesmasSidebar() {
       </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
           {navigation.map((item) => {
             const isActive = pathname === item.href || pathname?.startsWith(item.href)
             
@@ -169,9 +190,9 @@ export default function PuskesmasSidebar() {
         </nav>
 
         {/* User Profile - Simplified Version */}
-        <div className={`p-4 border-t border-blue-800 ${isCollapsed ? 'text-center' : ''}`}>
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-[#1E5EFF] rounded-full flex items-center justify-center text-white font-bold">
+        <div className={`p-4 pb-6 border-t border-blue-800 ${isCollapsed ? 'text-center' : ''}`}>
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-10 h-10 bg-[#1E5EFF] rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
               {getInitials()}
             </div>
             
@@ -183,14 +204,14 @@ export default function PuskesmasSidebar() {
                 
                 <div className="space-y-1 mt-1">
                   <div className="flex items-center gap-1">
-                    <Mail className="w-3 h-3 text-blue-300" />
+                    <Mail className="w-3 h-3 text-blue-300 flex-shrink-0" />
                     <p className="text-xs text-white truncate" title={getUserEmail()}>
                       {getUserEmail()}
                     </p>
                   </div>
                   
                   <div className="flex items-center gap-1">
-                    <MapPinIcon className="w-3 h-3 text-blue-300" />
+                    <MapPinIcon className="w-3 h-3 text-blue-300 flex-shrink-0" />
                     <p className="text-xs text-white truncate" title={getKecamatan()}>
                       {getKecamatan()}
                     </p>
@@ -201,11 +222,11 @@ export default function PuskesmasSidebar() {
           </div>
           
           {/* Logout Button */}
-          <div className="mt-4">
+          <div>
             {!isCollapsed ? (
               <button 
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center space-x-2 bg-gradient-to-br from-blue-50 to-white hover:from-red-700 hover:to-red-800 text-red-800 hover:text-white py-2 rounded-lg transition-colors"
+                className="w-full flex items-center justify-center space-x-2 bg-gradient-to-br from-blue-50 to-white hover:from-red-700 hover:to-red-800 text-red-800 hover:text-white py-2.5 rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="text-sm font-semibold">Keluar</span>
@@ -213,7 +234,7 @@ export default function PuskesmasSidebar() {
             ) : (
               <button 
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center text-blue-300 hover:text-white py-2 rounded-lg hover:bg-blue-800 transition-colors"
+                className="w-full flex items-center justify-center text-blue-300 hover:text-white py-2.5 rounded-lg hover:bg-blue-800 transition-colors"
                 title="Keluar"
               >
                 <LogOut className="w-4 h-4" />
