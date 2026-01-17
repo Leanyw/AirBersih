@@ -68,7 +68,7 @@ Password : admin123
 ```
 
 🔑 **Login Admin Khusus**
-Admin dapat mengakses halaman login khusus melalui:
+Admin juga dapat diakses melalui halaman login khusus:
 
 ```
 https://air-bersih.vercel.app/admin-login
