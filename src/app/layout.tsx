@@ -8,8 +8,10 @@ import HealthAlert from '@/components/health/HealthAlert';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Air Bersih - Monitoring Kualitas Air',
-  description: 'Aplikasi monitoring kualitas air untuk daerah 3T',
+  title: "Air Bersih",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

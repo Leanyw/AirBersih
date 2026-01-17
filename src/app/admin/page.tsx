@@ -557,7 +557,48 @@ export default function StatistikPage() {
           }%`}
           description="Berhasil ditangani"
         />
+              <StatCard
+          title="Laporan Pending"
+          value={stats.pendingReports}
+          icon={Clock}
+          iconBg="bg-yellow-100"
+          iconColor="text-yellow-600"
+          trend={stats.pendingReports > 10 ? "up" : "down"}
+          trendValue={
+            stats.pendingReports > 10 ? "Perlu tindakan" : "Dalam batas"
+          }
+          description="Menunggu penanganan"
+        />
 
+        <StatCard
+          title="Laporan Ditolak"
+          value={stats.rejectedReports}
+          icon={X}
+          iconBg="bg-red-100"
+          iconColor="text-red-600"
+          trend="stable"
+          trendValue={`${
+            stats.totalReports > 0
+              ? Math.round((stats.rejectedReports / stats.totalReports) * 100)
+              : 0
+          }%`}
+          description="Tidak valid/ditolak"
+        />
+
+        <StatCard
+          title="Laporan Diproses"
+          value={stats.processingReports}
+          icon={Filter}
+          iconBg="bg-blue-100"
+          iconColor="text-blue-600"
+          trend="stable"
+          trendValue={`${
+            stats.totalReports > 0
+              ? Math.round((stats.processingReports / stats.totalReports) * 100)
+              : 0
+          }%`}
+          description="Sedang ditangani"
+        />
         <StatCard
           title="Rata-rata Respon"
           value={`${stats.averageResponseTime} hari`}
@@ -581,11 +622,8 @@ export default function StatistikPage() {
           trendValue="Terdaftar"
           description="Titik pantau air"
         />
-      </div>
 
-      {/* Water Quality Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
+         <StatCard
           title="Air Aman"
           value={`${waterQualityData.good}%`}
           icon={CheckCircle}
@@ -636,54 +674,8 @@ export default function StatistikPage() {
           }%`}
           description="Analisis laboratorium"
         />
-      </div>
 
-      {/* Additional Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Laporan Pending"
-          value={stats.pendingReports}
-          icon={Clock}
-          iconBg="bg-yellow-100"
-          iconColor="text-yellow-600"
-          trend={stats.pendingReports > 10 ? "up" : "down"}
-          trendValue={
-            stats.pendingReports > 10 ? "Perlu tindakan" : "Dalam batas"
-          }
-          description="Menunggu penanganan"
-        />
-
-        <StatCard
-          title="Laporan Ditolak"
-          value={stats.rejectedReports}
-          icon={X}
-          iconBg="bg-red-100"
-          iconColor="text-red-600"
-          trend="stable"
-          trendValue={`${
-            stats.totalReports > 0
-              ? Math.round((stats.rejectedReports / stats.totalReports) * 100)
-              : 0
-          }%`}
-          description="Tidak valid/ditolak"
-        />
-
-        <StatCard
-          title="Diproses"
-          value={stats.processingReports}
-          icon={Filter}
-          iconBg="bg-blue-100"
-          iconColor="text-blue-600"
-          trend="stable"
-          trendValue={`${
-            stats.totalReports > 0
-              ? Math.round((stats.processingReports / stats.totalReports) * 100)
-              : 0
-          }%`}
-          description="Sedang ditangani"
-        />
-
-        <StatCard
+         <StatCard
           title="Cakupan Lab"
           value={`${
             stats.totalReports > 0

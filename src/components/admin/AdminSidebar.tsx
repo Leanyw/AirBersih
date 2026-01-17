@@ -154,10 +154,10 @@ export default function AdminSidebar() {
             {!isCollapsed ? (
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center space-x-2 text-red-300 hover:text-white py-2 rounded-lg hover:bg-red-800 transition-colors"
+                className="w-full flex items-center justify-center space-x-2 bg-gradient-to-br from-blue-50 to-white hover:from-red-700 hover:to-red-800 text-red-800 hover:text-white py-2 rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="text-sm">Keluar</span>
+                <span className="text-sm font-semibold">Keluar</span>
               </button>
             ) : (
               <button
