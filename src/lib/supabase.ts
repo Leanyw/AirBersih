@@ -1,14 +1,26 @@
+// lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-})
+// Client untuk server components (tanpa cookies)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Client untuk server actions/API routes dengan cookies
+export const createSupabaseServerClient = (cookies: any) => {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Cookie: cookies,
+      },
+    },
+  })
+}
 
 // Helper functions - CLIENT SIDE ONLY
 export const getCurrentUser = async () => {

@@ -28,12 +28,23 @@ export default function LoginPage() {
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
+      // Cek dulu apakah session sudah ada
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      
+      if (existingSession) {
+        console.log("Already logged in, redirecting...");
+        window.location.href = "/loading";
+        return;
+      }
+
+      // Lakukan login
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
@@ -41,11 +52,26 @@ export default function LoginPage() {
 
       if (error) throw error;
 
+      console.log("Login successful:", data.user?.email);
       toast.success("Login berhasil!");
 
-      // 🔥 WAJIB: trigger reload supaya cookie kebaca middleware
-      window.location.href = "/login";
+      // 🔥 PERBAIKAN: Tunggu sebentar untuk session tersinkronisasi
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 🔥 PERBAIKAN: Cek session setelah login
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      
+      if (newSession) {
+        console.log("New session confirmed, redirecting to loading...");
+        // Gunakan window.location untuk hard redirect
+        window.location.href = "/loading";
+      } else {
+        console.error("No session after login!");
+        setError("Gagal membuat session. Silakan coba lagi.");
+        toast.error("Gagal membuat session");
+      }
     } catch (err: any) {
+      console.error("Login error:", err);
       setError(err.message);
       toast.error(err.message);
     } finally {
@@ -96,12 +122,12 @@ export default function LoginPage() {
           <div className="mb-10">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
               <div className="w-20 h-20 flex items-center justify-center">
-              <img
-                src="/logo.png"
-                alt="Logo AirBersih"
-                className="w-full h-full object-contain"
-              />
-            </div>
+                <img
+                  src="/logo.png"
+                  alt="Logo AirBersih"
+                  className="w-full h-full object-contain"
+                />
+              </div>
             </div>
             <h2 className="text-3xl font-bold mb-4">
               Sistem Monitoring Air Bersih
@@ -322,7 +348,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-050 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center gap-2">
