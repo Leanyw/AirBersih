@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useRef } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState, useRef } from "react";
+import { useAuth } from "@/providers/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import {
   MapPin,
   Plus,
@@ -32,29 +32,32 @@ import {
   Droplets,
   Thermometer,
   Clock,
-  User
-} from 'lucide-react';
-import { format } from 'date-fns';
-import { id } from 'date-fns/locale';
-import dynamic from 'next/dynamic';
-import toast from 'react-hot-toast';
+  User,
+} from "lucide-react";
+import { format } from "date-fns";
+import { id } from "date-fns/locale";
+import dynamic from "next/dynamic";
+import toast from "react-hot-toast";
 
 // Dynamic import untuk peta
-const WaterSourceMap = dynamic(() => import('@/components/puskesmas/WaterSourceMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[400px] bg-gray-100 rounded-lg flex items-center justify-center">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      <p className="ml-3 text-gray-600">Memuat peta...</p>
-    </div>
-  )
-});
+const WaterSourceMap = dynamic(
+  () => import("@/components/puskesmas/WaterSourceMap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[400px] bg-gray-100 rounded-lg flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <p className="ml-3 text-gray-600">Memuat peta...</p>
+      </div>
+    ),
+  }
+);
 
 interface WaterSource {
   id: string;
   nama: string;
-  jenis: 'sumur' | 'pdam' | 'mata_air' | 'sungai' | 'embung';
-  status: 'aman' | 'rawan' | 'tidak_aman';
+  jenis: "sumur" | "pdam" | "mata_air" | "sungai" | "embung";
+  status: "aman" | "rawan" | "tidak_aman";
   latitude: number;
   longitude: number;
   alamat: string;
@@ -79,20 +82,22 @@ type WaterSourceFormData = {
 export default function SumberAirPage() {
   const { profile, user } = useAuth();
   const [sources, setSources] = useState<WaterSource[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterJenis, setFilterJenis] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterJenis, setFilterJenis] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingSource, setEditingSource] = useState<WaterSource | null>(null);
-  const [mapView, setMapView] = useState<'map' | 'satellite'>('map');
-  const [selectedSource, setSelectedSource] = useState<WaterSource | null>(null);
+  const [mapView, setMapView] = useState<"map" | "satellite">("map");
+  const [selectedSource, setSelectedSource] = useState<WaterSource | null>(
+    null
+  );
   const [stats, setStats] = useState({
     total: 0,
     aman: 0,
     rawan: 0,
-    tidak_aman: 0
+    tidak_aman: 0,
   });
 
   useEffect(() => {
@@ -118,22 +123,22 @@ export default function SumberAirPage() {
 
     try {
       const { data, error } = await supabase
-        .from('water_sources')
-        .select('status')
-        .eq('kecamatan', profile.kecamatan);
+        .from("water_sources")
+        .select("status")
+        .eq("kecamatan", profile.kecamatan);
 
       if (error) throw error;
 
       if (data) {
         setStats({
           total: data.length,
-          aman: data.filter(s => s.status === 'aman').length,
-          rawan: data.filter(s => s.status === 'rawan').length,
-          tidak_aman: data.filter(s => s.status === 'tidak_aman').length
+          aman: data.filter((s) => s.status === "aman").length,
+          rawan: data.filter((s) => s.status === "rawan").length,
+          tidak_aman: data.filter((s) => s.status === "tidak_aman").length,
         });
       }
     } catch (error) {
-      console.error('❌ Error fetching stats:', error);
+      console.error("❌ Error fetching stats:", error);
     }
   };
 
@@ -147,37 +152,39 @@ export default function SumberAirPage() {
     try {
       setIsLoading(true);
 
-      console.log('🔍 Fetching water sources for:', profile?.kecamatan);
+      console.log("🔍 Fetching water sources for:", profile?.kecamatan);
 
       // Query untuk semua sumber air di kecamatan puskesmas
       let query = supabase
-        .from('water_sources')
-        .select('*')
-        .eq('kecamatan', profile?.kecamatan || '')
-        .order('created_at', { ascending: false });
+        .from("water_sources")
+        .select("*")
+        .eq("kecamatan", profile?.kecamatan || "")
+        .order("created_at", { ascending: false });
 
       // Apply filters
-      if (filterStatus !== 'all') {
-        query = query.eq('status', filterStatus);
+      if (filterStatus !== "all") {
+        query = query.eq("status", filterStatus);
       }
 
-      if (filterJenis !== 'all') {
-        query = query.eq('jenis', filterJenis);
+      if (filterJenis !== "all") {
+        query = query.eq("jenis", filterJenis);
       }
 
       if (searchQuery) {
-        query = query.or(`nama.ilike.%${searchQuery}%,alamat.ilike.%${searchQuery}%`);
+        query = query.or(
+          `nama.ilike.%${searchQuery}%,alamat.ilike.%${searchQuery}%`
+        );
       }
 
       const { data, error } = await query;
 
       if (error) {
-        console.error('❌ Error fetching water sources:', error);
-        toast.error('Gagal memuat data sumber air');
+        console.error("❌ Error fetching water sources:", error);
+        toast.error("Gagal memuat data sumber air");
         return;
       }
 
-      console.log('✅ Water sources found:', data?.length || 0);
+      console.log("✅ Water sources found:", data?.length || 0);
 
       const sourcesData = data || [];
       setSources(sourcesData);
@@ -185,17 +192,13 @@ export default function SumberAirPage() {
       setSources(sourcesData);
 
       // Stats are now fetched separately via fetchStats()
-
-
     } catch (error) {
-      console.error('❌ Error in fetchWaterSources:', error);
-      toast.error('Terjadi kesalahan saat memuat data');
+      console.error("❌ Error in fetchWaterSources:", error);
+      toast.error("Terjadi kesalahan saat memuat data");
     } finally {
       setIsLoading(false);
     }
   };
-
-
 
   const handleAddSource = async (formData: WaterSourceFormData) => {
     try {
@@ -207,39 +210,38 @@ export default function SumberAirPage() {
         latitude: Number(formData.latitude),
         longitude: Number(formData.longitude),
         alamat: formData.alamat,
-        kecamatan: profile?.kecamatan || '',
+        kecamatan: profile?.kecamatan || "",
         catatan: formData.catatan || null,
-        puskesmas_id: user?.id || ''
+        puskesmas_id: user?.id || "",
       };
 
-      console.log('📝 Inserting water source:', sourceData);
+      console.log("📝 Inserting water source:", sourceData);
 
       const { data, error } = await supabase
-        .from('water_sources')
+        .from("water_sources")
         .insert([sourceData])
         .select()
         .single(); // Gunakan .single() untuk mendapatkan satu record
 
       if (error) {
-        console.error('❌ Supabase insert error:', error);
+        console.error("❌ Supabase insert error:", error);
         toast.error(`Gagal menambahkan sumber air: ${error.message}`);
         return;
       }
 
-      console.log('✅ Water source added:', data);
-      toast.success('Sumber air berhasil ditambahkan');
+      console.log("✅ Water source added:", data);
+      toast.success("Sumber air berhasil ditambahkan");
 
       // Update local state
-      setSources(prev => [data, ...prev]);
+      setSources((prev) => [data, ...prev]);
 
       // Refresh stats from server to ensure accuracy
       fetchStats();
 
       setShowAddModal(false);
-
     } catch (error: any) {
-      console.error('❌ Error adding water source:', error);
-      toast.error(error.message || 'Gagal menambahkan sumber air');
+      console.error("❌ Error adding water source:", error);
+      toast.error(error.message || "Gagal menambahkan sumber air");
     }
   };
 
@@ -250,80 +252,86 @@ export default function SumberAirPage() {
       const updateData = {
         ...formData,
         latitude: parseFloat(formData.latitude.toString()),
-        longitude: parseFloat(formData.longitude.toString())
+        longitude: parseFloat(formData.longitude.toString()),
       };
 
-      console.log('📝 Updating water source:', updateData);
+      console.log("📝 Updating water source:", updateData);
 
       const { error } = await supabase
-        .from('water_sources')
+        .from("water_sources")
         .update(updateData)
-        .eq('id', editingSource.id);
+        .eq("id", editingSource.id);
 
       if (error) throw error;
 
-      toast.success('Sumber air berhasil diperbarui');
+      toast.success("Sumber air berhasil diperbarui");
       fetchWaterSources();
       fetchStats(); // Update stats in case status changed
       setShowEditModal(false);
       setEditingSource(null);
-
     } catch (error: any) {
-      console.error('❌ Error updating water source:', error);
-      toast.error(error.message || 'Gagal memperbarui sumber air');
+      console.error("❌ Error updating water source:", error);
+      toast.error(error.message || "Gagal memperbarui sumber air");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus sumber air ini?')) return;
+    if (!confirm("Apakah Anda yakin ingin menghapus sumber air ini?")) return;
 
     try {
       const { error } = await supabase
-        .from('water_sources')
+        .from("water_sources")
         .delete()
-        .eq('id', id);
+        .eq("id", id);
 
       if (error) throw error;
 
-      toast.success('Sumber air berhasil dihapus');
+      toast.success("Sumber air berhasil dihapus");
       fetchWaterSources();
       fetchStats();
     } catch (error) {
-      console.error('❌ Error deleting water source:', error);
-      toast.error('Gagal menghapus sumber air');
+      console.error("❌ Error deleting water source:", error);
+      toast.error("Gagal menghapus sumber air");
     }
   };
-
-
 
   const handleViewDetails = (source: WaterSource) => {
     setSelectedSource(source);
   };
 
-
-
   const exportToCSV = () => {
-    const headers = ['Nama', 'Jenis', 'Status', 'Alamat', 'Kecamatan', 'Terakhir Dicek'];
+    const headers = [
+      "Nama",
+      "Jenis",
+      "Status",
+      "Alamat",
+      "Kecamatan",
+      "Terakhir Dicek",
+    ];
     const csvContent = [
-      headers.join(','),
-      ...sources.map(source => [
-        `"${source.nama}"`,
-        source.jenis,
-        source.status,
-        `"${source.alamat}"`,
-        source.kecamatan,
-        source.last_checked ? format(new Date(source.last_checked), 'yyyy-MM-dd') : '-'
-      ].join(','))
-    ].join('\n');
+      headers.join(","),
+      ...sources.map((source) =>
+        [
+          `"${source.nama}"`,
+          source.jenis,
+          source.status,
+          `"${source.alamat}"`,
+          source.kecamatan,
+          source.last_checked
+            ? format(new Date(source.last_checked), "yyyy-MM-dd")
+            : "-",
+        ].join(",")
+      ),
+    ].join("\n");
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `sumber-air-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.download = `sumber-air-${format(new Date(), "yyyy-MM-dd")}.csv`;
     link.click();
   };
 
-  if (!profile || profile.role !== 'puskesmas') {
+  if (!profile || profile.role !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -345,7 +353,8 @@ export default function SumberAirPage() {
             Manajemen Sumber Air
           </h1>
           <p className="text-gray-600 mt-2">
-            {profile?.nama || 'Puskesmas'} - Kecamatan {profile?.kecamatan || 'Wilayah'}
+            {profile?.nama || "Puskesmas"} - Kecamatan{" "}
+            {profile?.kecamatan || "Wilayah"}
             <span className="text-sm text-blue-600 ml-2">
               ({stats.total} sumber air terdaftar)
             </span>
@@ -362,7 +371,7 @@ export default function SumberAirPage() {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-b from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             Tambah Sumber
@@ -382,32 +391,39 @@ export default function SumberAirPage() {
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-2">
             <MapPin className="w-5 h-5 text-blue-600" />
-            <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {stats.total}
+            </div>
           </div>
           <div className="text-sm text-gray-600">Total Sumber</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-green-500" />
-            <div className="text-2xl font-bold text-green-600">{stats.aman}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {stats.aman}
+            </div>
           </div>
           <div className="text-sm text-gray-600">Aman</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-yellow-500" />
-            <div className="text-2xl font-bold text-yellow-600">{stats.rawan}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {stats.rawan}
+            </div>
           </div>
           <div className="text-sm text-gray-600">Rawan</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center gap-2">
             <XCircle className="w-5 h-5 text-red-500" />
-            <div className="text-2xl font-bold text-red-600">{stats.tidak_aman}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {stats.tidak_aman}
+            </div>
           </div>
           <div className="text-sm text-gray-600">Tidak Aman</div>
         </div>
-
       </div>
 
       {/* Map Section */}
@@ -420,8 +436,12 @@ export default function SumberAirPage() {
             </h3>
             <div className="flex border border-gray-300 rounded-lg overflow-hidden">
               <button
-                onClick={() => setMapView('map')}
-                className={`px-3 py-1 text-sm ${mapView === 'map' ? 'bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white' : 'bg-gray-50 text-gray-700'}`}
+                onClick={() => setMapView("map")}
+                className={`px-3 py-1 text-sm ${
+                  mapView === "map"
+                    ? "bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white"
+                    : "bg-gray-50 text-gray-700"
+                }`}
               >
                 Peta
               </button>
@@ -437,10 +457,7 @@ export default function SumberAirPage() {
         </div>
 
         <div className="h-[400px] rounded-lg overflow-hidden border border-gray-300">
-          <WaterSourceMap
-            sources={sources}
-            mapType={mapView}
-          />
+          <WaterSourceMap sources={sources} mapType={mapView} />
         </div>
 
         <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
@@ -503,9 +520,9 @@ export default function SumberAirPage() {
 
             <button
               onClick={() => {
-                setFilterStatus('all');
-                setFilterJenis('all');
-                setSearchQuery('');
+                setFilterStatus("all");
+                setFilterJenis("all");
+                setSearchQuery("");
               }}
               className="px-4 py-2 border border-gray-300 rounded-lg flex items-center gap-2 hover:bg-gray-50 transition-colors"
             >
@@ -520,21 +537,25 @@ export default function SumberAirPage() {
           <div className="text-center py-12">
             <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto" />
             <p className="mt-4 text-gray-600">Memuat data sumber air...</p>
-            <p className="text-sm text-gray-400 mt-2">Mengambil data dari database</p>
+            <p className="text-sm text-gray-400 mt-2">
+              Mengambil data dari database
+            </p>
           </div>
         ) : sources.length === 0 ? (
           <div className="text-center py-12">
             <div className="flex flex-col items-center">
               <MapPin className="w-16 h-16 text-gray-300 mb-4" />
               <p className="text-gray-600 text-lg font-medium mb-2">
-                {searchQuery || filterStatus !== 'all' || filterJenis !== 'all'
-                  ? 'Tidak ada sumber air yang sesuai dengan filter'
-                  : 'Belum ada sumber air terdaftar'}
+                {searchQuery || filterStatus !== "all" || filterJenis !== "all"
+                  ? "Tidak ada sumber air yang sesuai dengan filter"
+                  : "Belum ada sumber air terdaftar"}
               </p>
               <p className="text-gray-400 max-w-md text-center mb-4">
-                {!searchQuery && filterStatus === 'all' && filterJenis === 'all'
-                  ? `Mulai dengan menambahkan sumber air pertama di kecamatan ${profile?.kecamatan || 'wilayah Anda'}.`
-                  : 'Coba ubah kata kunci pencarian atau filter yang diterapkan.'}
+                {!searchQuery && filterStatus === "all" && filterJenis === "all"
+                  ? `Mulai dengan menambahkan sumber air pertama di kecamatan ${
+                      profile?.kecamatan || "wilayah Anda"
+                    }.`
+                  : "Coba ubah kata kunci pencarian atau filter yang diterapkan."}
               </p>
               <button
                 onClick={() => setShowAddModal(true)}
@@ -550,30 +571,51 @@ export default function SumberAirPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Nama Sumber</th>
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Jenis</th>
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Lokasi</th>
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Status</th>
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Terakhir Dicek</th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Nama Sumber
+                  </th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Jenis
+                  </th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Lokasi
+                  </th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Status
+                  </th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Terakhir Dicek
+                  </th>
 
-                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Aksi</th>
+                  <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">
+                    Aksi
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {sources.map((source) => (
-                  <tr key={source.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={source.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
                     <td className="py-3 px-4">
-                      <div className="font-medium text-gray-900">{source.nama}</div>
+                      <div className="font-medium text-gray-900">
+                        {source.nama}
+                      </div>
                       <div className="text-xs text-gray-500">
                         ID: {source.id.substring(0, 8)}
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="text-sm text-gray-900">{getJenisText(source.jenis)}</div>
+                      <div className="text-sm text-gray-900">
+                        {getJenisText(source.jenis)}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="max-w-xs">
-                        <div className="text-sm text-gray-900">{source.alamat}</div>
+                        <div className="text-sm text-gray-900">
+                          {source.alamat}
+                        </div>
                         <div className="text-xs text-gray-500">
                           {source.kecamatan}
                         </div>
@@ -582,17 +624,31 @@ export default function SumberAirPage() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
                         {getStatusIcon(source.status)}
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(source.status)}`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(
+                            source.status
+                          )}`}
+                        >
                           {getStatusText(source.status)}
                         </span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="text-sm text-gray-900">
-                        {source.last_checked ? format(new Date(source.last_checked), 'dd MMM yyyy', { locale: id }) : '-'}
+                        {source.last_checked
+                          ? format(
+                              new Date(source.last_checked),
+                              "dd MMM yyyy",
+                              { locale: id }
+                            )
+                          : "-"}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {source.last_checked ? format(new Date(source.last_checked), 'HH:mm', { locale: id }) : ''}
+                        {source.last_checked
+                          ? format(new Date(source.last_checked), "HH:mm", {
+                              locale: id,
+                            })
+                          : ""}
                       </div>
                     </td>
 
@@ -615,7 +671,7 @@ export default function SumberAirPage() {
                         <button
                           onClick={() => {
                             const url = `https://www.google.com/maps?q=${source.latitude},${source.longitude}`;
-                            window.open(url, '_blank');
+                            window.open(url, "_blank");
                           }}
                           className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                           title="Navigasi"
@@ -643,15 +699,24 @@ export default function SumberAirPage() {
             <ul className="space-y-3 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                <span><strong>Aman:</strong> Air layak minum, bebas kontaminasi, memenuhi standar kesehatan</span>
+                <span>
+                  <strong>Aman:</strong> Air layak minum, bebas kontaminasi,
+                  memenuhi standar kesehatan
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                <span><strong>Rawan:</strong> Potensi kontaminasi, perlu pemantauan rutin, kondisi menurun</span>
+                <span>
+                  <strong>Rawan:</strong> Potensi kontaminasi, perlu pemantauan
+                  rutin, kondisi menurun
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <span><strong>Tidak Aman:</strong> Terkontaminasi, berbahaya untuk dikonsumsi, perlu penanganan segera</span>
+                <span>
+                  <strong>Tidak Aman:</strong> Terkontaminasi, berbahaya untuk
+                  dikonsumsi, perlu penanganan segera
+                </span>
               </li>
             </ul>
           </div>
@@ -663,19 +728,28 @@ export default function SumberAirPage() {
             <ul className="space-y-2 text-sm text-gray-600">
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Update status sumber air secara berkala (minimal 1 bulan sekali)</span>
+                <span>
+                  Update status sumber air secara berkala (minimal 1 bulan
+                  sekali)
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Verifikasi data sumber air untuk keakuratan informasi</span>
+                <span>
+                  Verifikasi data sumber air untuk keakuratan informasi
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Prioritaskan penanganan sumber air dengan status "Tidak Aman"</span>
+                <span>
+                  Prioritaskan penanganan sumber air dengan status "Tidak Aman"
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                <span>Gunakan fitur peta untuk monitoring distribusi sumber air</span>
+                <span>
+                  Gunakan fitur peta untuk monitoring distribusi sumber air
+                </span>
               </li>
             </ul>
           </div>
@@ -689,7 +763,7 @@ export default function SumberAirPage() {
             <AddWaterSourceForm
               onClose={() => setShowAddModal(false)}
               onSubmit={handleAddSource}
-              kecamatan={profile?.kecamatan || ''}
+              kecamatan={profile?.kecamatan || ""}
             />
           </div>
         </div>
@@ -727,28 +801,36 @@ export default function SumberAirPage() {
 }
 
 // Komponen Form Tambah Sumber Air
-function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
+function AddWaterSourceForm({
+  onClose,
+  onSubmit,
+  kecamatan,
+}: {
   onClose: () => void;
   onSubmit: (data: WaterSourceFormData) => void;
   kecamatan: string;
 }) {
   const [formData, setFormData] = useState<WaterSourceFormData>({
-    nama: '',
-    jenis: 'sumur',
-    status: 'aman',
+    nama: "",
+    jenis: "sumur",
+    status: "aman",
     latitude: -6.9667,
     longitude: 110.4167,
-    alamat: '',
+    alamat: "",
     kecamatan: kecamatan,
-    catatan: ''
+    catatan: "",
   });
 
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const getCurrentLocation = () => {
@@ -756,22 +838,22 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
       setIsLoadingLocation(true);
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             latitude: position.coords.latitude,
-            longitude: position.coords.longitude
+            longitude: position.coords.longitude,
           }));
           setIsLoadingLocation(false);
-          toast.success('Lokasi berhasil diperoleh');
+          toast.success("Lokasi berhasil diperoleh");
         },
         (error) => {
-          console.error('Error getting location:', error);
-          toast.error('Gagal mendapatkan lokasi: ' + error.message);
+          console.error("Error getting location:", error);
+          toast.error("Gagal mendapatkan lokasi: " + error.message);
           setIsLoadingLocation(false);
         }
       );
     } else {
-      toast.error('Browser tidak mendukung geolocation');
+      toast.error("Browser tidak mendukung geolocation");
     }
   };
 
@@ -781,7 +863,7 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
     try {
       await onSubmit(formData);
     } catch (error) {
-      console.error('Error in form submission:', error);
+      console.error("Error in form submission:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -791,7 +873,9 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
     <div className="p-6">
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h3 className="text-xl font-bold text-gray-900">Tambah Sumber Air Baru</h3>
+          <h3 className="text-xl font-bold text-gray-900">
+            Tambah Sumber Air Baru
+          </h3>
           <p className="text-gray-600">Kecamatan: {kecamatan}</p>
         </div>
         <button
@@ -819,7 +903,9 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Contoh: Sumur Bor RT 03"
             />
-            <p className="text-xs text-gray-500 mt-1">Masukkan nama sumber air dengan jelas</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Masukkan nama sumber air dengan jelas
+            </p>
           </div>
 
           {/* Jenis Sumber Air */}
@@ -867,7 +953,9 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
             </label>
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Latitude</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Latitude
+                </label>
                 <input
                   type="number"
                   step="any"
@@ -879,7 +967,9 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Longitude</label>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Longitude
+                </label>
                 <input
                   type="number"
                   step="any"
@@ -942,7 +1032,9 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Tambahkan catatan atau informasi penting lainnya..."
           />
-          <p className="text-xs text-gray-500 mt-1">Opsional: kondisi sumber air, akses, atau informasi lain</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Opsional: kondisi sumber air, akses, atau informasi lain
+          </p>
         </div>
 
         {/* Legend Section */}
@@ -951,15 +1043,21 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              <span className="text-sm text-gray-700">Aman: Air layak minum, bebas kontaminasi</span>
+              <span className="text-sm text-gray-700">
+                Aman: Air layak minum, bebas kontaminasi
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-              <span className="text-sm text-gray-700">Rawan: Potensi kontaminasi, perlu pemantauan</span>
+              <span className="text-sm text-gray-700">
+                Rawan: Potensi kontaminasi, perlu pemantauan
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-red-500"></div>
-              <span className="text-sm text-gray-700">Tidak Aman: Terkontaminasi, berbahaya</span>
+              <span className="text-sm text-gray-700">
+                Tidak Aman: Terkontaminasi, berbahaya
+              </span>
             </div>
           </div>
         </div>
@@ -978,7 +1076,7 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isSubmitting ? (
                 <>
@@ -986,7 +1084,7 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
                   Menyimpan...
                 </>
               ) : (
-                'Tambah Sumber Air'
+                "Tambah Sumber Air"
               )}
             </button>
           </div>
@@ -999,9 +1097,12 @@ function AddWaterSourceForm({ onClose, onSubmit, kecamatan }: {
   );
 }
 
-
 // Komponen Form Edit Sumber Air
-function EditWaterSourceForm({ source, onClose, onSubmit }: {
+function EditWaterSourceForm({
+  source,
+  onClose,
+  onSubmit,
+}: {
   source: WaterSource;
   onClose: () => void;
   onSubmit: (data: WaterSourceFormData) => void;
@@ -1014,12 +1115,16 @@ function EditWaterSourceForm({ source, onClose, onSubmit }: {
     longitude: source.longitude,
     alamat: source.alamat,
     kecamatan: source.kecamatan,
-    catatan: source.catatan || ''
+    catatan: source.catatan || "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1176,7 +1281,10 @@ function EditWaterSourceForm({ source, onClose, onSubmit }: {
 }
 
 // Komponen Detail Sumber Air
-function WaterSourceDetail({ source, onClose }: {
+function WaterSourceDetail({
+  source,
+  onClose,
+}: {
   source: WaterSource;
   onClose: () => void;
 }) {
@@ -1213,7 +1321,15 @@ function WaterSourceDetail({ source, onClose }: {
             </div>
             <div>
               <label className="text-sm text-gray-500">Status</label>
-              <p className={`font-medium ${source.status === 'aman' ? 'text-green-600' : source.status === 'rawan' ? 'text-yellow-600' : 'text-red-600'}`}>
+              <p
+                className={`font-medium ${
+                  source.status === "aman"
+                    ? "text-green-600"
+                    : source.status === "rawan"
+                    ? "text-yellow-600"
+                    : "text-red-600"
+                }`}
+              >
                 {getStatusText(source.status)}
               </p>
             </div>
@@ -1238,7 +1354,9 @@ function WaterSourceDetail({ source, onClose }: {
               </div>
               <div>
                 <label className="text-sm text-gray-500">Koordinat</label>
-                <p className="font-medium">{source.latitude.toFixed(6)}, {source.longitude.toFixed(6)}</p>
+                <p className="font-medium">
+                  {source.latitude.toFixed(6)}, {source.longitude.toFixed(6)}
+                </p>
               </div>
             </div>
           </div>
@@ -1255,7 +1373,9 @@ function WaterSourceDetail({ source, onClose }: {
               <div className="flex justify-between">
                 <span className="text-gray-500">Ditambahkan</span>
                 <span className="font-medium">
-                  {format(new Date(source.created_at), 'dd MMM yyyy HH:mm', { locale: id })}
+                  {format(new Date(source.created_at), "dd MMM yyyy HH:mm", {
+                    locale: id,
+                  })}
                 </span>
               </div>
             )}
@@ -1263,7 +1383,9 @@ function WaterSourceDetail({ source, onClose }: {
               <div className="flex justify-between">
                 <span className="text-gray-500">Terakhir Diupdate</span>
                 <span className="font-medium">
-                  {format(new Date(source.updated_at), 'dd MMM yyyy HH:mm', { locale: id })}
+                  {format(new Date(source.updated_at), "dd MMM yyyy HH:mm", {
+                    locale: id,
+                  })}
                 </span>
               </div>
             )}
@@ -1271,7 +1393,9 @@ function WaterSourceDetail({ source, onClose }: {
               <div className="flex justify-between">
                 <span className="text-gray-500">Terakhir Dicek</span>
                 <span className="font-medium">
-                  {format(new Date(source.last_checked), 'dd MMM yyyy HH:mm', { locale: id })}
+                  {format(new Date(source.last_checked), "dd MMM yyyy HH:mm", {
+                    locale: id,
+                  })}
                 </span>
               </div>
             )}
@@ -1281,7 +1405,9 @@ function WaterSourceDetail({ source, onClose }: {
         {/* Catatan */}
         {source.catatan && (
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <h4 className="font-semibold text-gray-800 mb-3">Catatan Tambahan</h4>
+            <h4 className="font-semibold text-gray-800 mb-3">
+              Catatan Tambahan
+            </h4>
             <p className="text-gray-700">{source.catatan}</p>
           </div>
         )}
@@ -1312,38 +1438,50 @@ function WaterSourceDetail({ source, onClose }: {
 // Helper functions
 function getStatusIcon(status: string) {
   switch (status) {
-    case 'aman': return <CheckCircle className="w-5 h-5 text-green-500" />;
-    case 'rawan': return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
-    case 'tidak_aman': return <XCircle className="w-5 h-5 text-red-500" />;
-    default: return <MapPin className="w-5 h-5 text-gray-500" />;
+    case "aman":
+      return <CheckCircle className="w-5 h-5 text-green-500" />;
+    case "rawan":
+      return <AlertTriangle className="w-5 h-5 text-yellow-500" />;
+    case "tidak_aman":
+      return <XCircle className="w-5 h-5 text-red-500" />;
+    default:
+      return <MapPin className="w-5 h-5 text-gray-500" />;
   }
 }
 
 function getStatusText(status: string): string {
   switch (status) {
-    case 'aman': return 'Aman';
-    case 'rawan': return 'Rawan';
-    case 'tidak_aman': return 'Tidak Aman';
-    default: return status;
+    case "aman":
+      return "Aman";
+    case "rawan":
+      return "Rawan";
+    case "tidak_aman":
+      return "Tidak Aman";
+    default:
+      return status;
   }
 }
 
 function getStatusColor(status: string): string {
   switch (status) {
-    case 'aman': return 'bg-green-100 text-green-800 border-green-200';
-    case 'rawan': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'tidak_aman': return 'bg-red-100 text-red-800 border-red-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    case "aman":
+      return "bg-green-100 text-green-800 border-green-200";
+    case "rawan":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "tidak_aman":
+      return "bg-red-100 text-red-800 border-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200";
   }
 }
 
 function getJenisText(jenis: string): string {
   const jenisMap: Record<string, string> = {
-    'sumur': 'Sumur',
-    'pdam': 'PDAM',
-    'mata_air': 'Mata Air',
-    'sungai': 'Sungai',
-    'embung': 'Embung'
+    sumur: "Sumur",
+    pdam: "PDAM",
+    mata_air: "Mata Air",
+    sungai: "Sungai",
+    embung: "Embung",
   };
   return jenisMap[jenis] || jenis;
 }

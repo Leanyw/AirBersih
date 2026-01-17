@@ -31,7 +31,7 @@ export default function PuskesmasLayout({
             </main>
             <footer className="bg-white border-t border-gray-200 py-3 px-6">
               <p className="text-sm text-gray-600 text-center">
-                Puskesmas Dashboard • © 2024 Air Bersih
+                Puskesmas Dashboard • © 2026 Air Bersih
               </p>
             </footer>
           </div>

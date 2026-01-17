@@ -718,7 +718,7 @@ export default function PuskesmasSettingsPage() {
                       <button
                         onClick={handleSaveProfile}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {isSaving ? (
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -834,7 +834,7 @@ export default function PuskesmasSettingsPage() {
                       <button
                         onClick={handleSavePuskesmasInfo}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {isSaving ? (
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -936,7 +936,7 @@ export default function PuskesmasSettingsPage() {
                       <button
                         onClick={handleSaveNotifications}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {isSaving ? (
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -1047,7 +1047,7 @@ export default function PuskesmasSettingsPage() {
                       <button
                         onClick={handleChangePassword}
                         disabled={isSaving}
-                        className="w-full flex justify-center items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        className="w-full flex justify-center items-center gap-2 px-6 bg-gradient-to-br from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                         {isSaving ? (
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>

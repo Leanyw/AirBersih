@@ -110,33 +110,19 @@ export default function LoginPage() {
               </svg>
             </div>
             <h2 className="text-3xl font-bold mb-4">
-              Sistem Monitoring Air Bersih
+              Selamat datang di halaman admin
             </h2>
             <p className="text-blue-100">
-              Masuk untuk melanjutkan pemantauan kualitas air dan laporan
-              wilayah Anda.
+              Masuk untuk melanjutkan pemantauan kualitas air dan laporan warga.
             </p>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-lg">
-                <Shield className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="font-semibold">Akses Aman</p>
-                <p className="text-sm text-blue-100">
-                  Data Anda terlindungi dengan enkripsi
-                </p>
-              </div>
-            </div>
-
             {/* Demo Account Info */}
             <div className="mt-6 p-4 bg-white/10 rounded-xl">
               <h4 className="text-sm font-semibold mb-2">Demo Akun:</h4>
               <div className="space-y-1 text-sm text-blue-100">
-                <p>• Puskesmas: puskesmas.semarangbarat@example.com</p>
-                <p>• Warga: warga@example.com</p>
+                <p>• Admin: admin@example.com</p>
               </div>
             </div>
           </div>
