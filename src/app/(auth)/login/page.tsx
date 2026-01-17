@@ -13,7 +13,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, getUserProfile } from "@/lib/supabase";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
@@ -28,27 +28,69 @@ export default function LoginPage() {
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
+      // Cek dulu apakah session sudah ada
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      
+      if (existingSession) {
+        window.location.href = "/loading";
+        return;
+      }
+
+      // Lakukan login
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        setError(error.message);
+        toast.error(error.message);
+        setIsLoading(false);
+        return;
+      }
 
+      console.log("Login successful:", data.user?.email);
       toast.success("Login berhasil!");
 
-      // 🔥 WAJIB: trigger reload supaya cookie kebaca middleware
-      window.location.href = "/login";
+      // Tunggu session tersinkronisasi
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 🔥 PERBAIKAN: Langsung cek role dan redirect TANPA melalui /loading
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      
+      if (newSession) {
+        // Ambil profile user untuk menentukan role
+        const profile = await getUserProfile(newSession.user.id);
+        
+        let redirectPath = "/dashboard"; // default untuk warga
+        
+        if (profile?.role === "admin") {
+          redirectPath = "/dashboard/admin";
+        } else if (profile?.role === "puskesmas") {
+          redirectPath = "/puskesmas";
+        }
+        
+        console.log("Redirecting to:", redirectPath);
+        
+        // Hard redirect ke halaman yang sesuai
+        window.location.href = redirectPath;
+      } else {
+        console.error("No session after login!");
+        setError("Gagal membuat session. Silakan coba lagi.");
+        toast.error("Gagal membuat session");
+        setIsLoading(false);
+      }
     } catch (err: any) {
+      console.error("Login error:", err);
       setError(err.message);
       toast.error(err.message);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -62,25 +104,23 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
 
-      if (error) throw error;
-
-      setResetSent(true);
-      toast.success("Link reset password telah dikirim ke email Anda");
-    } catch (error: any) {
+    if (error) {
       console.error("Reset password error:", error);
       setError(error.message);
       toast.error(error.message || "Gagal mengirim reset password");
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    setResetSent(true);
+    toast.success("Link reset password telah dikirim ke email Anda");
+    setIsLoading(false);
   };
 
-  // Fungsi untuk toggle reset mode
   const toggleResetMode = () => {
     setIsResetMode(!isResetMode);
     setResetEmail("");
@@ -96,12 +136,12 @@ export default function LoginPage() {
           <div className="mb-10">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
               <div className="w-20 h-20 flex items-center justify-center">
-              <img
-                src="/logo.png"
-                alt="Logo AirBersih"
-                className="w-full h-full object-contain"
-              />
-            </div>
+                <img
+                  src="/logo.png"
+                  alt="Logo AirBersih"
+                  className="w-full h-full object-contain"
+                />
+              </div>
             </div>
             <h2 className="text-3xl font-bold mb-4">
               Sistem Monitoring Air Bersih
@@ -322,7 +362,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-050 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <div className="flex items-center justify-center gap-2">
