@@ -13,7 +13,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, getUserProfile } from "@/lib/supabase";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
@@ -39,7 +39,6 @@ export default function LoginPage() {
       const { data: { session: existingSession } } = await supabase.auth.getSession();
       
       if (existingSession) {
-        console.log("Already logged in, redirecting...");
         window.location.href = "/loading";
         return;
       }
@@ -50,31 +49,48 @@ export default function LoginPage() {
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        setError(error.message);
+        toast.error(error.message);
+        setIsLoading(false);
+        return;
+      }
 
       console.log("Login successful:", data.user?.email);
       toast.success("Login berhasil!");
 
-      // 🔥 PERBAIKAN: Tunggu sebentar untuk session tersinkronisasi
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Tunggu session tersinkronisasi
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // 🔥 PERBAIKAN: Cek session setelah login
+      // 🔥 PERBAIKAN: Langsung cek role dan redirect TANPA melalui /loading
       const { data: { session: newSession } } = await supabase.auth.getSession();
       
       if (newSession) {
-        console.log("New session confirmed, redirecting to loading...");
-        // Gunakan window.location untuk hard redirect
-        window.location.href = "/loading";
+        // Ambil profile user untuk menentukan role
+        const profile = await getUserProfile(newSession.user.id);
+        
+        let redirectPath = "/dashboard"; // default untuk warga
+        
+        if (profile?.role === "admin") {
+          redirectPath = "/dashboard/admin";
+        } else if (profile?.role === "puskesmas") {
+          redirectPath = "/puskesmas";
+        }
+        
+        console.log("Redirecting to:", redirectPath);
+        
+        // Hard redirect ke halaman yang sesuai
+        window.location.href = redirectPath;
       } else {
         console.error("No session after login!");
         setError("Gagal membuat session. Silakan coba lagi.");
         toast.error("Gagal membuat session");
+        setIsLoading(false);
       }
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message);
       toast.error(err.message);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -88,25 +104,23 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
 
-      if (error) throw error;
-
-      setResetSent(true);
-      toast.success("Link reset password telah dikirim ke email Anda");
-    } catch (error: any) {
+    if (error) {
       console.error("Reset password error:", error);
       setError(error.message);
       toast.error(error.message || "Gagal mengirim reset password");
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    setResetSent(true);
+    toast.success("Link reset password telah dikirim ke email Anda");
+    setIsLoading(false);
   };
 
-  // Fungsi untuk toggle reset mode
   const toggleResetMode = () => {
     setIsResetMode(!isResetMode);
     setResetEmail("");
