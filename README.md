@@ -207,7 +207,6 @@ http://localhost:3000
 * Feature-based folder structure
 * Reusable components
 * Type-safe dengan TypeScript
-* Siap dikembangkan ke mode **offline-first (PWA)**
 
 ---
 
