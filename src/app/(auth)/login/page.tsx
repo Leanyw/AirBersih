@@ -91,23 +91,17 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen grid md:grid-cols-2 bg-gradient-to-br from-blue-50 via-white to-cyan-50">
       {/* LEFT - Sidebar */}
-      <div className="hidden md:flex bg-gradient-to-br from-blue-500 to-cyan-400 text-white px-12">
+      <div className="hidden md:flex bg-gradient-to-t from-blue-600 to-cyan-500 text-white px-12">
         <div className="max-w-md mx-auto flex flex-col justify-center">
           <div className="mb-10">
-            <div className="bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-              <svg
-                className="w-8 h-8 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+              <div className="w-20 h-20 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="Logo AirBersih"
+                className="w-full h-full object-contain"
+              />
+            </div>
             </div>
             <h2 className="text-3xl font-bold mb-4">
               Sistem Monitoring Air Bersih
@@ -134,7 +128,7 @@ export default function LoginPage() {
             {/* Demo Account Info */}
             <div className="mt-6 p-4 bg-white/10 rounded-xl">
               <h4 className="text-sm font-semibold mb-2">Demo Akun:</h4>
-              <div className="space-y-1 text-sm text-blue-100">
+              <div className="space-y-1 text-sm text-blue-100 font-semibold">
                 <p>• Puskesmas: puskesmas.semarangbarat@example.com</p>
                 <p>• Warga: warga@example.com</p>
               </div>

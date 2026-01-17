@@ -22,8 +22,12 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-600 to-cyan-500 p-2 rounded-xl shadow-sm">
-              <Droplets className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="Logo AirBersih"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <p className="font-bold text-lg">AirBersih</p>
