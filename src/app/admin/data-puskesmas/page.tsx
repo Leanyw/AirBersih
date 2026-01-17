@@ -32,13 +32,13 @@ interface PuskesmasData {
   latitude: number | null;
   longitude: number | null;
   created_at: string;
-  status: "active" | "inactive";
+  is_active: boolean;
 }
 
 interface PuskesmasStats {
   total: number;
-  active: number;
-  inactive: number;
+  active_account: number;
+  inactive_account: number;
 }
 
 /* ================= MAP PICKER ================= */
@@ -60,14 +60,11 @@ export default function DataPuskesmasPage() {
   const [filtered, setFiltered] = useState<PuskesmasData[]>([]);
   const [stats, setStats] = useState<PuskesmasStats>({
     total: 0,
-    active: 0,
-    inactive: 0,
+    active_account: 0,
+    inactive_account: 0,
   });
 
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "active" | "inactive"
-  >("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -80,6 +77,7 @@ export default function DataPuskesmasPage() {
     phone: "",
     alamat: "",
     kecamatan: "",
+    is_active: true,
   });
 
   const [lat, setLat] = useState<number | null>(null);
@@ -100,7 +98,7 @@ export default function DataPuskesmasPage() {
       const mapped: PuskesmasData[] =
         data?.map((p: any) => ({
           ...p,
-          status: p.latitude && p.longitude ? "active" : "inactive",
+          is_active: p.is_active ?? true,
         })) || [];
 
       setList(mapped);
@@ -130,19 +128,16 @@ export default function DataPuskesmasPage() {
       );
     }
 
-    if (filterStatus !== "all") {
-      temp = temp.filter((p) => p.status === filterStatus);
-    }
-
     setFiltered(temp);
-  }, [list, search, filterStatus]);
+  }, [list, search]);
 
   /* ================= STATS ================= */
   const calculateStats = (data: PuskesmasData[]) => {
     const total = data.length;
-    const active = data.filter((p) => p.status === "active").length;
-    const inactive = total - active;
-    setStats({ total, active, inactive });
+    const active_account = data.filter((p) => p.is_active).length;
+    const inactive_account = total - active_account;
+    
+    setStats({ total, active_account, inactive_account });
   };
 
   /* ================= CRUD ================= */
@@ -153,6 +148,7 @@ export default function DataPuskesmasPage() {
       phone: "",
       alamat: "",
       kecamatan: "",
+      is_active: true,
     });
     setLat(null);
     setLng(null);
@@ -198,10 +194,26 @@ export default function DataPuskesmasPage() {
     fetchData();
   };
 
-  const getStatusColor = (status: string) =>
-    status === "active"
-      ? "bg-green-100 text-green-800 border-green-200"
-      : "bg-gray-100 text-gray-800 border-gray-200";
+  const handleToggleActivation = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("puskesmas")
+        .update({ is_active: !currentStatus })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast.success(
+        currentStatus
+          ? "Akun puskesmas dinonaktifkan"
+          : "Akun puskesmas diaktifkan"
+      );
+      
+      fetchData();
+    } catch {
+      toast.error("Gagal mengubah status akun");
+    }
+  };
 
   /* ================= LOADING ================= */
   if (loading) {
@@ -254,22 +266,22 @@ export default function DataPuskesmasPage() {
       </div>
 
       {/* ================= STATS ================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="bg-white p-4 rounded-xl shadow-sm border">
           <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
           <div className="text-sm text-gray-600">Total Puskesmas</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border">
           <div className="text-2xl font-bold text-green-600">
-            {stats.active}
+            {stats.active_account}
           </div>
-          <div className="text-sm text-gray-600">Aktif</div>
+          <div className="text-sm text-gray-600">Akun Aktif</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-2xl font-bold text-gray-600">
-            {stats.inactive}
+          <div className="text-2xl font-bold text-red-600">
+            {stats.inactive_account}
           </div>
-          <div className="text-sm text-gray-600">Tidak Aktif</div>
+          <div className="text-sm text-gray-600">Akun Nonaktif</div>
         </div>
       </div>
 
@@ -284,21 +296,6 @@ export default function DataPuskesmasPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
-
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select
-              value={filterStatus}
-              onChange={(e) =>
-                setFilterStatus(e.target.value as "all" | "active" | "inactive")
-              }
-              className="pl-10 pr-8 py-2 border rounded-lg text-sm"
-            >
-              <option value="all">Semua Status</option>
-              <option value="active">Aktif</option>
-              <option value="inactive">Tidak Aktif</option>
-            </select>
           </div>
         </div>
 
@@ -357,13 +354,16 @@ export default function DataPuskesmasPage() {
                     </td>
 
                     <td className="py-3 px-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                          p.status
-                        )}`}
+                      <button
+                        onClick={() => handleToggleActivation(p.id, p.is_active)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                          p.is_active
+                            ? "bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
+                            : "bg-red-100 text-red-800 border-red-200 hover:bg-red-200"
+                        }`}
                       >
-                        {p.status === "active" ? "Aktif" : "Tidak Aktif"}
-                      </span>
+                        {p.is_active ? "Aktif" : "Nonaktif"}
+                      </button>
                     </td>
 
                     <td className="py-3 px-4 flex gap-2">
@@ -372,8 +372,9 @@ export default function DataPuskesmasPage() {
                           setSelected(p);
                           setModal("detail");
                         }}
+                        className="p-1 hover:bg-gray-100 rounded"
                       >
-                        <Eye />
+                        <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => {
@@ -383,11 +384,15 @@ export default function DataPuskesmasPage() {
                           setLng(p.longitude);
                           setModal("edit");
                         }}
+                        className="p-1 hover:bg-gray-100 rounded"
                       >
-                        <Pencil />
+                        <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(p.id)}>
-                        <Trash />
+                      <button 
+                        onClick={() => handleDelete(p.id)}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        <Trash className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
@@ -405,8 +410,8 @@ export default function DataPuskesmasPage() {
           <div>
             <h3 className="font-semibold mb-2">Informasi Data Puskesmas</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• Status aktif jika lokasi peta tersedia</li>
-              <li>• Digunakan untuk pemetaan layanan air bersih</li>
+              <li>• Status akun mengontrol akses login puskesmas</li>
+              <li>• Klik tombol status akun untuk mengaktifkan/nonaktifkan</li>
               <li>• Data hanya dapat dikelola oleh admin</li>
             </ul>
           </div>
@@ -440,6 +445,21 @@ export default function DataPuskesmasPage() {
                 />
               ))}
 
+            {modal !== "detail" && modal !== "add" && (
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={form.is_active}
+                  onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="is_active" className="text-sm">
+                  Akun Aktif
+                </label>
+              </div>
+            )}
+
             <MapContainer
               center={[lat || -6.2, lng || 106.8]}
               zoom={13}
@@ -456,6 +476,23 @@ export default function DataPuskesmasPage() {
               )}
               {lat && lng && <Marker position={[lat, lng]} />}
             </MapContainer>
+
+            {modal === "detail" && selected && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-medium">Status Akun:</div>
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      selected.is_active
+                        ? "bg-green-100 text-green-800"
+                        : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {selected.is_active ? "Aktif" : "Nonaktif"}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {modal !== "detail" && (
               <button
