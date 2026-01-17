@@ -55,9 +55,6 @@ export default function LoginPage() {
       // 🔥 FIX: Tunggu 2 detik untuk pastikan session fully sync
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // 🔥 FIX: Hard redirect langsung ke loading page
-      window.location.href = "/loading";
-      
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message);

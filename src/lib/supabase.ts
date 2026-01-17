@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Client untuk server components (tanpa cookies)
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Client untuk server actions/API routes dengan cookies
