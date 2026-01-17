@@ -29,21 +29,14 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
+  // handleLogin function
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
-      // Cek dulu apakah session sudah ada
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
-      
-      if (existingSession) {
-        window.location.href = "/loading";
-        return;
-      }
-
-      // Lakukan login
+      // Langsung login tanpa cek session dulu
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
@@ -59,34 +52,12 @@ export default function LoginPage() {
       console.log("Login successful:", data.user?.email);
       toast.success("Login berhasil!");
 
-      // Tunggu session tersinkronisasi
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 🔥 FIX: Tunggu 2 detik untuk pastikan session fully sync
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // 🔥 PERBAIKAN: Langsung cek role dan redirect TANPA melalui /loading
-      const { data: { session: newSession } } = await supabase.auth.getSession();
+      // 🔥 FIX: Hard redirect langsung ke loading page
+      window.location.href = "/loading";
       
-      if (newSession) {
-        // Ambil profile user untuk menentukan role
-        const profile = await getUserProfile(newSession.user.id);
-        
-        let redirectPath = "/dashboard"; // default untuk warga
-        
-        if (profile?.role === "admin") {
-          redirectPath = "/dashboard/admin";
-        } else if (profile?.role === "puskesmas") {
-          redirectPath = "/puskesmas";
-        }
-        
-        console.log("Redirecting to:", redirectPath);
-        
-        // Hard redirect ke halaman yang sesuai
-        window.location.href = redirectPath;
-      } else {
-        console.error("No session after login!");
-        setError("Gagal membuat session. Silakan coba lagi.");
-        toast.error("Gagal membuat session");
-        setIsLoading(false);
-      }
     } catch (err: any) {
       console.error("Login error:", err);
       setError(err.message);
