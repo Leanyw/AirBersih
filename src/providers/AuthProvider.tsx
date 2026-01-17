@@ -227,12 +227,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password: userData.password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('❌ Auth error:', authError);
+        throw authError;
+      }
+      
       if (!authData.user) throw new Error('No user returned');
 
-      console.log('✅ Auth success');
+      console.log('✅ Auth success, user ID:', authData.user.id);
       
-      // 2. Set profile cepat
+      // 2. Insert ke tabel users (public)
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([
+          {
+            id: authData.user.id,
+            email: userData.email,
+            nama: userData.nama,
+            nik: userData.nik,
+            phone: userData.phone,
+            kecamatan: userData.kecamatan,
+            kelurahan: userData.kelurahan,
+            role: 'warga', // default role
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            notifications_enabled: true,
+            sms_notifications: true,
+            email_notifications: true,
+            preferences: {}
+          }
+        ])
+        .select();
+
+      if (insertError) {
+        console.error('❌ Insert user error:', insertError);
+        
+        // Jika gagal insert, hapus user dari auth (opsional)
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        
+        throw insertError;
+      }
+
+      console.log('✅ User inserted to public.users');
+      
+      // 3. Set profile cepat
       const quickProfile = {
         id: authData.user.id,
         email: userData.email,
@@ -244,10 +282,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       setProfile(quickProfile);
       
-      // 3. Redirect ke dashboard
-      router.push('/dashboard');
+      // 4. Redirect ke dashboard
+      setTimeout(() => {
+        router.push('/dashboard');
+      }, 1000);
       
-      // 4. Return success
+      // 5. Return success
       return { 
         data: { 
           user: authData.user,
@@ -258,7 +298,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
     } catch (error: any) {
       console.error('❌ Quick signup failed:', error);
-      return { data: null, error };
+      
+      // Berikan error message yang lebih spesifik
+      let errorMessage = 'Pendaftaran gagal';
+      if (error.code === '23505') {
+        errorMessage = 'Email atau NIK sudah terdaftar';
+      } else if (error.message?.includes('already registered')) {
+        errorMessage = 'Email sudah terdaftar';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      return { 
+        data: null, 
+        error: { 
+          message: errorMessage,
+          code: error.code 
+        } 
+      };
     }
   };
 

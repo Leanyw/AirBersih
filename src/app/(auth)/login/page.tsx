@@ -52,8 +52,25 @@ export default function LoginPage() {
       console.log("Login successful:", data.user?.email);
       toast.success("Login berhasil!");
 
-      // 🔥 FIX: Tunggu 2 detik untuk pastikan session fully sync
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Tunggu sebentar untuk memastikan session tersimpan
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Ambil profile untuk menentukan redirect
+      if (data.user) {
+        const profile = await getUserProfile(data.user.id);
+
+        if (profile?.role === 'puskesmas') {
+          router.push('/puskesmas');
+        } else if (profile?.role === 'admin') {
+          router.push('/admin');
+        } else {
+          router.push('/dashboard');
+        }
+      } else {
+        router.push('/dashboard');
+      }
+
+      router.refresh(); // Force refresh untuk update session di server
       
     } catch (err: any) {
       console.error("Login error:", err);
